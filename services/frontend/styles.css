@@ -1,0 +1,55 @@
+html,body,#__next {
+  height: 100%;
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+
+body {
+  background: #fff;
+  color: #111;
+}
+
+.app-shell {
+  max-width: 980px;
+  margin: 28px auto;
+  padding: 24px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e6e9ee;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 6px 18px rgba(20,30,50,0.04);
+}
+
+.editor-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.editor-toolbar button {
+  background: #f5f7fb;
+  border: 1px solid #e0e6f0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.editor {
+  min-height: 260px;
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid #e8eef8;
+  background: linear-gradient(180deg,#fff,#fbfdff);
+  outline: none;
+}
+
+.actions { display:flex; gap:8px; align-items:center; margin-top:12px }
+
+.save-btn { background:#2563eb; color:#fff; border:none; padding:8px 14px; border-radius:8px; cursor:pointer }
+.save-btn[disabled] { opacity:0.6; cursor:default }
+
+.status { color:#666; font-size:13px }
+

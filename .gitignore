@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+.env.*
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+.next/
+out/
+dist/
+.npm/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Docker / runtime
+*.log
+
+# Local data
+postgres_data/
+prometheus_data/
+grafana_data/

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>فلوی سادهٔ سیستم — راست‌چین</title>
+  <style>
+    body{font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; direction:rtl; margin:24px; color:#0f172a}
+    .card{max-width:900px;margin:0 auto;background:#fff;border:1px solid #e6e9ef;padding:20px;border-radius:10px}
+    h1{margin:0 0 8px 0;text-align:right}
+    p.lead{color:#475569;margin:0 0 14px 0}
+    ol{padding-inline-start:18px;margin:0 0 18px 0}
+    li{margin:8px 0}
+    .diagram{display:flex;justify-content:flex-end;margin-top:18px}
+    svg{max-width:100%;height:auto;border-radius:8px}
+    .note{color:#6b7280;font-size:14px;margin-top:12px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>فلوی سادهٔ سیستم</h1>
+
+    <h2 style="margin-top:18px">هر سرویس چه کار می‌کند؟ (خیلی ساده)</h2>
+
+    <h3>کلاینت</h3>
+    <ul>
+      <li>کاربر را نشان می‌دهد و تغییرات او را می‌فرستد.</li>
+      <li>تغییر‌ها را موقتاً نشان می‌دهد قبل از ذخیرهٔ نهایی.</li>
+      <li>وقتی پیام دیگران می‌آید، صفحه را بروزرسانی می‌کند.</li>
+    </ul>
+
+    <h3>WebSocket Gateway (Go)</h3>
+    <ul>
+      <li>اتصال WebSocket را نگه می‌دارد و پیام‌ها را از کلاینت می‌گیرد.</li>
+      <li>پیام را سریعاً به دیگران پخش می‌کند و آن را به Redis می‌فرستد تا همه نمونه‌ها ببینند.</li>
+      <li>درخواست ذخیره‌سازی را به سرویس اسناد می‌فرستد و نتیجه را به کلاینت‌ها می‌فرستد.</li>
+    </ul>
+
+    <h3>Redis</h3>
+    <ul>
+      <li>پیام‌ها را بین گیت‌وی‌ها و سرویس‌ها پخش می‌کند (مثل کانال مرکزی).</li>
+      <li>اطلاعات موقت مثل «چه کسی آنلاین است» را نگه می‌دارد.</li>
+    </ul>
+
+    <h3>Document Service (Django)</h3>
+    <ul>
+      <li>ویرایش‌ها را می‌گیرد، آن‌ها را با هم ترکیب می‌کند و در پایگاه‌داده ذخیره می‌کند.</li>
+      <li>بعد از ذخیره، به Redis می‌گوید که تغییر انجام شده است.</li>
+    </ul>
+
+    <h3>PostgreSQL</h3>
+    <ul>
+      <li>نسخهٔ نهایی سند و تاریخچهٔ تغییرات را ذخیره می‌کند.</li>
+    </ul>
+
+    <h3>FastAPI و Workers (وظایف روشن)</h3>
+    <ul>
+      <li><strong>FastAPI:</strong> سرویس کم‌حالت برای کارهای سریع و هماهنگ‌سازی با سرویس‌ها.
+        - مثال‌ها: ساخت پیش‌نمایش (render)، دریافت وبهوک، تبدیل/صادرات فایل.
+        - وقتی کار سنگین است، FastAPI یک job در صف (مثلاً Redis یا صف کاری) می‌سازد و بلافاصله یک شناسهٔ کار (job id) بازمی‌گرداند.
+        - FastAPI می‌تواند برای اطلاعات بیشتر از Document Service درخواست بخواند و بعد از اتمام کار نتیجه را منتشر کند یا در یک مکان ذخیره (مثلاً S3) قرار دهد.
+      </li>
+      <li><strong>Workers (کارگران پس‌زمینه):</strong>
+        - صف‌ها یا Redis streams را مصرف می‌کنند و کارهای طولانی را اجرا می‌کنند (مثلاً رندر، تولید PDF، تبدیل فرمت).
+        - پس از اتمام، خروجی را ذخیره و نتیجه یا وضعیت را به Redis منتشر می‌کنند تا گیت‌وی یا FastAPI از آن آگاه شوند.
+      </li>
+      <li>مثال جریان ساده:
+        <ol>
+          <li>کاربر درخواست رندر می‌دهد → FastAPI یک job ایجاد و یک job id می‌دهد.</li>
+          <li>یک Worker job را می‌گیرد، رندر را اجرا می‌کند و فایل را ذخیره می‌کند.</li>
+          <li>Worker نتیجه را در Redis منتشر می‌کند یا به FastAPI اطلاع می‌دهد.</li>
+          <li>Gateway یا FastAPI وضعیت را به کلاینت ارسال یا لینک فایل را منتشر می‌کنند.</li>
+        </ol>
+      </li>
+    </ul>
+
+    <h2 style="margin-top:18px">فلوی ساده و مرتب (گام به گام)</h2>
+    <ol>
+      <li>کاربر تغییر می‌دهد و کلاینت آن را ارسال می‌کند.</li>
+      <li>گیت‌وی پیام را می‌گیرد و آن را سریع به بقیهٔ کلاینت‌ها نشان می‌دهد.</li>
+      <li>گیت‌وی پیام را به Redis می‌فرستد تا همهٔ سرورها ببینند.</li>
+      <li>گیت‌وی درخواست ذخیره را به Document Service می‌فرستد.</li>
+      <li>Document Service تغییر را ذخیره می‌کند و به Redis خبر می‌دهد.</li>
+      <li>Redis خبر را به گیت‌وی‌ها می‌رساند؛ گیت‌وی‌ها خبر را به کلاینت‌ها می‌دهند.</li>
+      <li>اگر نیاز باشد، FastAPI یا workers کارهای اضافی (مثل رندر) را انجام می‌دهند و نتیجه را منتشر می‌کنند.</li>
+    </ol>
+
+    <p class="note">خلاصه: کلاینت → گیت‌وی → Redis → Document Service → Postgres → (FastAPI/Worker) → گیت‌وی → کلاینت</p>
+
+    <div class="diagram" aria-hidden="true">
+      <!-- Replaced with a cleaner vertical flow SVG -->
+      <svg width="700" height="720" viewBox="0 0 700 720" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow" markerWidth="12" markerHeight="12" refX="12" refY="6" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L12,6 L0,12 z" fill="#0b1220" />
+          </marker>
+          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.08" />
+          </filter>
+        </defs>
+        <!-- Vertical layout centered -->
+        <!-- Step 1: Client -->
+        <g>
+          <circle cx="350" cy="70" r="22" fill="#0b1220" />
+          <text x="350" y="76" font-size="14" text-anchor="middle" fill="#fff">1</text>
+          <rect x="220" y="100" rx="10" ry="10" width="260" height="52" fill="#ffffff" stroke="#d1d5db" filter="url(#shadow)" />
+          <text x="350" y="132" font-size="14" text-anchor="middle" fill="#0b1220">کلاینت — نمایش و ارسال ویرایش</text>
+        </g>
+
+        <!-- Arrow 1 -->
+        <line x1="350" y1="155" x2="350" y2="190" stroke="#0b1220" stroke-width="3" marker-end="url(#arrow)" />
+
+        <!-- Step 2: Gateway -->
+        <g>
+          <circle cx="350" cy="210" r="22" fill="#0b1220" />
+          <text x="350" y="216" font-size="14" text-anchor="middle" fill="#fff">2</text>
+          <rect x="200" y="240" rx="10" ry="10" width="300" height="56" fill="#f8fafc" stroke="#cbd5e1" filter="url(#shadow)" />
+          <text x="350" y="274" font-size="14" text-anchor="middle" fill="#0b1220">WebSocket Gateway — پخش محلی و انتشار به Redis</text>
+        </g>
+
+        <!-- Arrow 2 -->
+        <line x1="350" y1="296" x2="350" y2="330" stroke="#0b1220" stroke-width="3" marker-end="url(#arrow)" />
+
+        <!-- Step 3: Redis -->
+        <g>
+          <circle cx="350" cy="350" r="22" fill="#0b1220" />
+          <text x="350" y="356" font-size="14" text-anchor="middle" fill="#fff">3</text>
+          <rect x="230" y="380" rx="10" ry="10" width="240" height="52" fill="#eef2ff" stroke="#c7d2fe" filter="url(#shadow)" />
+          <text x="350" y="412" font-size="14" text-anchor="middle" fill="#0b1220">Redis — کانال pub/sub و وضعیت موقت</text>
+        </g>
+
+        <!-- Arrow 3 -->
+        <line x1="350" y1="434" x2="350" y2="468" stroke="#0b1220" stroke-width="3" marker-end="url(#arrow)" />
+
+        <!-- Step 4: Document Service -->
+        <g>
+          <circle cx="350" cy="488" r="22" fill="#0b1220" />
+          <text x="350" y="494" font-size="14" text-anchor="middle" fill="#fff">4</text>
+          <rect x="200" y="520" rx="10" ry="10" width="300" height="56" fill="#fff7ed" stroke="#fed7aa" filter="url(#shadow)" />
+          <text x="350" y="554" font-size="14" text-anchor="middle" fill="#0b1220">Document Service — ادغام و ذخیره در Postgres</text>
+        </g>
+
+        <!-- Arrow 4 -->
+        <line x1="350" y1="576" x2="350" y2="610" stroke="#0b1220" stroke-width="3" marker-end="url(#arrow)" />
+
+        <!-- Step 5: Postgres -->
+        <g>
+          <circle cx="350" cy="630" r="22" fill="#0b1220" />
+          <text x="350" y="636" font-size="14" text-anchor="middle" fill="#fff">5</text>
+          <rect x="220" y="660" rx="10" ry="10" width="260" height="46" fill="#ecfeff" stroke="#bbf7d0" filter="url(#shadow)" />
+          <text x="350" y="690" font-size="13" text-anchor="middle" fill="#0b1220">PostgreSQL — ذخیرهٔ نهایی سند</text>
+        </g>
+
+        <!-- Side: FastAPI / Workers (trigger from Redis) -->
+        <g>
+          <rect x="490" y="360" rx="10" ry="10" width="160" height="56" fill="#f0fdf4" stroke="#bbf7d0" filter="url(#shadow)" />
+          <text x="570" y="392" font-size="13" text-anchor="middle" fill="#0b1220">FastAPI / Workers</text>
+          <line x1="430" y1="400" x2="490" y2="400" stroke="#0b1220" stroke-width="2" marker-end="url(#arrow)" />
+          <text x="460" y="388" font-size="12" text-anchor="middle" fill="#0b1220">run jobs</text>
+        </g>
+
+      </svg>
+    </div>
+
+    <p class="note">نکته: این تصویر یک نمای ساده‌شده است؛ جزئیات مانند احراز هویت، retryها، و format پیام‌ها در پیاده‌سازی مشخص می‌شوند.</p>
+  </div>
+</body>
+</html>
