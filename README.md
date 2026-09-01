@@ -1,4 +1,19 @@
-# Real-time Collaborative Document System
+<p align="center">
+  <img src="quill.png" alt="Quill - Collaborative Writing" width="100%">
+</p>
+
+<h1 align="center">Quill</h1>
+
+<p align="center">
+  <em>Real-time Collaborative Document System</em>
+</p>
+
+<p align="center">
+  <a href="docs/system-implementation-guide.md">English Guide</a> •
+  <a href="docs/system-implementation-guide-fa.md">راهنمای فارسی</a>
+</p>
+
+---
 
 > [!NOTE]
 > **This project is under active development.** New features are being added regularly to practice and explore system design, microservices architecture, real-time collaboration patterns, AI integration, and more. Stay tuned for updates.
