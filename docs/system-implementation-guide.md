@@ -1,350 +1,367 @@
-# راهنمای کامل معماری پروژه (نسخهٔ ساده)
+# System Architecture Guide
 
-این سند همان مستند فنی پروژه است، اما با زبان ساده‌تر و توضیح‌های بیشتر نوشته شده تا کسی که تازه برنامه‌نویسی یا معماری میکروسرویس را شروع کرده هم بتواند آن را دنبال کند. هر جا اصطلاح فنی جدیدی می‌آید، توضیح کوتاهی کنارش آمده است.
+> **Architecture Guide**
 
-> **اگر جایی از این سند با کد واقعی پروژه فرق داشت، کد همیشه درست است، نه سند.** در آن صورت باید همین سند اصلاح شود.
+This document is written from the ground up in simple language so that a beginner developer can understand what parts this system is built from, what each part does, and where data flows.
 
-## فهرست فصل‌ها
+> **ℹ️ What is this document about?**
+> This file explains the architecture, not the fine-grained coding details. It mainly answers which service does what and why this path was chosen.
 
-1. [هدف و دامنهٔ پروژه](#1-هدف-و-دامنهٔ-پروژه-چیست)
-2. [نمای کلی سیستم](#2-نمای-کلی-سیستم--نقشهٔ-راه)
-3. [سرویس‌ها و پورت‌ها](#3-سرویس‌ها-پورت‌ها-و-نقش-دقیق-هرکدام)
-4. [مدل دادهٔ سند](#4-مدل-دادهٔ-سند)
-5. [قرارداد پیام Realtime](#5-قرارداد-پیام-realtime)
-6. [پاسخ به ابهام Publish در Redis](#6-پاسخ-روشن-به-ابهام-publish-در-redis)
-7. [جریان کامل از ابتدا تا انتها](#7-جریان-کامل-از-ابتدا-تا-انتها)
-8. [APIهای فعلی](#8-apiهای-فعلی)
-9. [جریان احراز هویت](#9-جریان-احراز-هویت-authentication--کامل-و-قدم‌به‌قدم)
-10. [مانیتورینگ و مشاهده‌پذیری](#10-مانیتورینگ-و-مشاهده‌پذیری-observability)
-11. [حل تعارض در ویرایش همزمان](#11-حل-تعارض-در-ویرایش-همزمان)
-12. [مشکلات قبلی و راه‌حل‌ها](#12-مشکلاتی-که-قبلاً-پیش-آمده-و-راه‌حلشان)
-13. [بدهی فنی فعلی](#13-بدهی-فنی-فعلی)
-14. [چک‌لیست تست دستی](#14-چک‌لیست-تست-دستی-ویرایش-همزمان)
-15. [خلاصهٔ نهایی](#15-خلاصهٔ-نهایی)
+| **6** | **2** | **1** |
+|-------|-------|-------|
+| Core services in the architecture | Separate databases for auth and documents | Single source of truth for final document state |
 
 ---
 
-## 1) هدف و دامنهٔ پروژه چیست؟
+## Table of Contents
 
-این ریپازیتوری یک پروژهٔ آموزشی است، نه یک محصول تجاری آماده برای فروش. هدفش این است که با ساختن یک ابزار «ویرایش همزمان سند» شبیه گوگل‌داکس، یاد بگیریم چند برنامهٔ کوچک و مستقل چطور با هم همکاری می‌کنند.
-
-> **میکروسرویس یعنی چه؟**
-> به‌جای نوشتن یک برنامهٔ بزرگ که همه‌کار را انجام می‌دهد، سیستم را به چند برنامهٔ کوچک و مستقل تقسیم می‌کنیم که هرکدام فقط یک مسئولیت مشخص دارند و از طریق شبکه با هم حرف می‌زنند.
-
-**هدف‌های اصلی:**
-- فهمیدن این‌که وقتی چند نفر همزمان روی یک سند تایپ می‌کنند، داده از کجا تا کجا حرکت می‌کند.
-- یاد گرفتن این‌که چطور بین چند سرویس، مرز مشخص و قرارداد پیام تعریف کنیم.
-- تمرین هم‌زمان دو زبان و فریم‌ورک متفاوت: `Go` برای گیت‌وی و `Django/DRF` برای سرویس سند.
-
-**چیزهایی که هدف این پروژه نیستند:**
-- آماده‌بودن کامل برای production
-- پوشش سناریوهای پیچیدهٔ یک شرکت بزرگ (enterprise)
-
----
-
-## 2) نمای کلی سیستم — نقشهٔ راه
-
-بهترین راه برای فهمیدن این سیستم، تشبیه آن به یک رستوران است:
-
-| سرویس | نقش در تشبیه رستوران |
-|---|---|
-| **Frontend** (Next.js + TypeScript) | سالن رستوران؛ چیزی که کاربر می‌بیند و در آن تایپ می‌کند |
-| **Gateway** (Go + WebSocket) | گارسون؛ هر درخواست اول به او می‌رسد و او تصمیم می‌گیرد به کجا بفرستدش |
-| **Document Service** (Django + DRF) | آشپزخانهٔ اصلی؛ محتوای واقعی سندها و نسخه‌های قبلی این‌جا نگه‌داری می‌شود |
-| **Auth Service** (FastAPI) | نگهبان دم در؛ کارت شناسایی (توکن) صادر می‌کند |
-| **Export Service** (FastAPI) | بخش بسته‌بندی بیرون‌بر؛ سند را در قالب html/markdown/txt آماده می‌کند |
-| **Redis** | آیفون داخلی بین کارکنان؛ خبر سریع همه‌جا پخش می‌شود |
-| **PostgreSQL** | انباری اصلی و دائمی |
-
-> **WebSocket چیست؟**
-> در HTTP معمولی، کاربر سؤال می‌پرسد و ارتباط بسته می‌شود؛ شبیه نامه. WebSocket یک خط تلفن باز است که تا وقتی صفحه بسته نشده وصل می‌ماند و هر دو طرف هر لحظه می‌توانند پیام بفرستند — برای ویرایش زندهٔ سند ضروری است.
-
-> **Redis Pub/Sub چیست؟**
-> یک سرویس روی یک «کانال» پیام منتشر (publish) می‌کند، و هر سرویس دیگری که به همان کانال گوش داده (subscribe) باشد فوراً همان پیام را دریافت می‌کند؛ شبیه یک ایستگاه رادیویی.
+1. [Project Goal](#1-project-goal)
+2. [System Overview](#2-system-overview)
+3. [Services and Responsibilities](#3-services-and-responsibilities)
+4. [Databases](#4-databases)
+5. [Document Data Model](#5-document-data-model)
+6. [Authentication Flow](#6-authentication-flow)
+7. [Opening a Document Flow](#7-opening-a-document-flow)
+8. [Edit and Sync Flow](#8-edit-and-sync-flow)
+9. [Online Users (Presence)](#9-online-users-presence)
+10. [Remote Cursors](#10-remote-cursors)
+11. [Audit Service and Kafka](#11-audit-service-and-kafka)
+12. [Export Flow](#12-export-flow)
+13. [Monitoring and Observability](#13-monitoring-and-observability)
+14. [Current Limitations](#14-current-limitations)
+15. [Final Summary](#15-final-summary)
 
 ---
 
-## 3) سرویس‌ها، پورت‌ها و نقش دقیق هرکدام
+## 1) Project Goal
 
-> **پورت چیست؟** یک عدد که نشان می‌دهد یک پیام شبکه‌ای باید به کدام برنامه (روی همان کامپیوتر) برسد.
+This project is a simple system for real-time collaborative document editing. Multiple users can work on a single document and see each other's changes.
 
-| سرویس | پورت | وظیفهٔ دقیق |
-|---|---|---|
-| frontend | `3000` | نمایش سند، بارگذاری از API، همگام‌سازی زنده با Yjs |
-| gateway | `8080` | مسیر `/ws`، پروکسی `/api/*`، broadcast لحظه‌ای |
-| document-service | `8000` | CRUD سند، ذخیرهٔ `content` و `yjs_state`، ثبت `DocumentVersion` |
-| auth-service | `8002` | ثبت‌نام، ورود، تازه‌سازی توکن، اطلاعات کاربر فعلی |
-| export-service | `8001` | خروجی سند در قالب html/markdown/txt |
+> **⚠️ This project is built for learning only**
+> The goal of this project is not to produce a ready-to-deploy product. The goal is to deeply understand microservice architecture concepts, system design, AI, and modern software engineering. All design decisions were made with the purpose of learning and better understanding architectural patterns.
+
+### Topics you will learn in this project
+
+- **Microservices Architecture**: How to split a large system into small, independent services, each with a clear responsibility.
+- **System Design**: Learning design patterns for distributed systems, including CQRS, Event Sourcing, and Event-Driven Architecture.
+- **Real-time Collaboration**: Understanding CRDT and OT patterns for multi-user concurrent document editing.
+- **WebSocket and Real-time Communication**: Implementing bidirectional communication between client and server using WebSocket.
+- **Authentication & Security**: Implementing JWT, refresh tokens, and modern authentication models.
+- **Redis Pub/Sub Messaging**: Using Redis for inter-service communication and state coordination in distributed systems.
+- **Event Streaming with Kafka**: Using Kafka for asynchronous events and service decoupling.
+- **Observability and Monitoring**: Using Prometheus, Grafana, and Jaeger for system monitoring.
+- **Testing**: Writing unit, integration, and end-to-end tests for different services.
+- **DevOps and Docker**: Containerizing services and orchestrating them with Docker Compose.
+
+In simple terms: here we will understand what each part does and how these parts together maintain a shared document.
+
+> **✅ Educational Goal of the Project**
+> Learning microservice architecture, WebSocket, Redis, JWT authentication, document storage in a separate service, Kafka, monitoring, and professional testing.
 
 ---
 
-## 4) مدل دادهٔ سند
+## 2) System Overview
 
-- `title` — عنوان سند.
-- `content` — نسخهٔ سادهٔ متنی/HTML برای نمایش سریع یا fallback.
-- `yjs_state` — ساختار دادهٔ Yjs برای آبگیری (hydration) و ادغام بدون تعارض.
+To put it very simply, this project consists of several small programs, each performing a specific task.
 
-> **چرا دو فرمت داریم؟**
-> `yjs_state` برای ادغام درست چند ویرایش همزمان لازم است ولی برای نمایش سریع مناسب نیست. `content` همان محتوا را ساده نگه می‌دارد تا اگر `yjs_state` خراب بود، چیزی برای نمایش داشته باشیم.
+Here, the Frontend is what the user sees in the browser, the Gateway is like the main gate, the Document Service is like a central notebook, and PostgreSQL is like a storage drawer.
 
-هر بار ذخیرهٔ موفق محتوا، یک نسخهٔ جدید هم در جدول `DocumentVersion` ثبت می‌شود — مثل «سابقهٔ نسخه‌ها»ی گوگل‌داکس.
-
----
-
-## 5) قرارداد پیام Realtime
-
-```json
-{
-  "type": "join | update | sync-state",
-  "docId": 123,
-  "clientId": "client-abc",
-  "update": "base64-yjs-update"
-}
+```
+Frontend ↔ Gateway ↔ Document Service ↔ PostgreSQL
 ```
 
-- `join` — «می‌خواهم به اتاق این سند وصل شوم.»
-- `update` — «یک تغییر جدید دادم، بقیه هم اعمال کنند.»
-- `sync-state` — «این نسخهٔ رسمی و نهایی است.» فقط باید از سرویس سند بیاید.
-
-> **چرا کلاینت اجازه ندارد sync-state بفرستد؟**
-> اگر هر کاربر می‌توانست ادعا کند «این نسخهٔ رسمی است»، یک باگ یا کاربر بدخواه می‌توانست حالت جعلی را به بقیه تحمیل کند. برای همین فقط پیامی با `clientId=document-service` به‌عنوان sync-state پذیرفته می‌شود.
-
-گیت‌وی از سمت کلاینت فقط `join` و `update` را می‌پذیرد.
-
----
-
-## 6) پاسخ روشن به ابهام «publish در Redis»
-
-سؤال رایج: «publish روی Redis کِی اتفاق می‌افتد؟» در نسخهٔ فعلی کد، پاسخ ساده است: **فقط یک مسیر publish داریم.** گیت‌وی برای پیام‌های `update` دیگر چیزی روی Redis منتشر نمی‌کند. تنها جایی که publish واقعی اتفاق می‌افتد، **Document Service** است، آن‌هم فقط بعد از ذخیرهٔ دائمی سند.
-
-### ۶.۲ — publish توسط Document Service (بعد از ذخیرهٔ دائمی)
-
-این تنها مسیر publish موجود در سیستم است:
-
-1. درخواست `PATCH /api/documents/:id` با موفقیت در پایگاه‌داده ذخیره می‌شود.
-2. یک نسخهٔ جدید در `DocumentVersion` ثبت می‌شود.
-3. اگر `yjs_state` خالی نباشد، پیام `sync-state` با `clientId=document-service` روی Redis منتشر می‌شود.
-
-**هدف:** اعلام رسمی این‌که «این، نسخه‌ای است که واقعاً و برای همیشه ذخیره شد.»
-
-> **پس همگام‌سازی لحظه‌ای (بدون ذخیره) چطور کار می‌کند؟**
-> پیام‌های `update` هنگام تایپ دیگر از Redis رد نمی‌شوند. گیت‌وی این پیام‌ها را مستقیماً و بلافاصله بین کلاینت‌های متصل به همان instance خودش broadcast می‌کند، بدون واسطهٔ Redis. Redis فقط برای اعلام نسخهٔ رسمیِ ذخیره‌شده (`sync-state`) استفاده می‌شود.
-
-```text
-PATCH save → PostgreSQL → DocumentVersion → Document Service publish (sync-state, Redis)
+```
+Frontend ↔ Auth Service ↔ Auth PostgreSQL
 ```
 
-**نتیجه:** الان فقط همین یک مسیر publish را داریم. هیچ publish جداگانه‌ای از سمت Gateway برای پیام‌های `update` وجود ندارد.
-
----
-
-## 7) جریان کامل از ابتدا تا انتها
-
-### ۷.۱ ورود کاربر
-1. کاربر وارد می‌شود و access token می‌گیرد.
-2. همان توکن هم برای API و هم برای WebSocket استفاده می‌شود.
-
-### ۷.۲ بارگذاری سند
-1. Frontend درخواست `GET /api/documents/:id` می‌فرستد.
-2. داده روی یک `Y.Doc` آبگیری (hydrate) می‌شود.
-3. اگر آن حالت خراب/خالی بود، از `content` به‌عنوان جایگزین استفاده می‌شود.
-
-### ۷.۳ اتصال به realtime
-1. اتصال به `/ws?token=...`.
-2. کلاینت پیام `join` می‌فرستد.
-3. گیت‌وی کاربر را به اتاق همان سند اضافه می‌کند.
-
-### ۷.۴ ویرایش همزمان
-1. هر تایپ، یک «update» کوچک در Yjs تولید می‌کند.
-2. این update به‌شکل پیام `update` فرستاده می‌شود.
-3. گیت‌وی این پیام را مستقیماً و بدون واسطهٔ Redis، بین کلاینت‌های متصل به همان instance broadcast می‌کند (فصل ۶).
-4. کلاینت‌های دیگر همان تغییر را اعمال می‌کنند.
-
-### ۷.۵ ذخیرهٔ دائمی
-
-> **Debounce یعنی چه؟**
-> به‌جای ذخیره با هر حرف تایپ‌شده، صبر می‌کنیم کاربر چند صدم ثانیه دست از تایپ بکشد و بعد ذخیره می‌کنیم — مثل در آسانسور که کمی صبر می‌کند قبل از بسته‌شدن.
-
-1. تایمر autosave با debounce زمان‌بندی می‌شود.
-2. `PATCH /api/documents/:id` همراه با `content`, `yjs_state` و `full=true` فرستاده می‌شود.
-3. سرویس سند ذخیره، نسخه‌گذاری و publish رسمی (فصل ۶.۲) را انجام می‌دهد.
-
-### ۷.۶ رفرش صفحه
-1. دوباره GET زده می‌شود.
-2. یا حالت ذخیره‌شده اعمال می‌شود، یا از fallback استفاده می‌شود.
-
----
-
-## 8) APIهای فعلی
-
-**Auth Service**
-
-| مسیر | توضیح |
-|---|---|
-| `GET /health` | بررسی سلامت |
-| `POST /auth/register` | ثبت‌نام |
-| `POST /auth/login` | ورود و دریافت توکن‌ها |
-| `POST /auth/refresh` | گرفتن access token جدید |
-| `GET /auth/me` | اطلاعات کاربر فعلی |
-
-**Document Service (پشت `/api` در گیت‌وی)**
-
-| مسیر | توضیح |
-|---|---|
-| `GET /api/health`, `GET /api/metrics` | سلامت و متریک‌ها |
-| `GET/POST /api/folders` | لیست یا ساخت پوشه |
-| `PATCH/DELETE /api/folders/:id` | ویرایش یا حذف پوشه |
-| `GET/POST /api/documents` | لیست یا ساخت سند |
-| `GET/PATCH/DELETE /api/documents/:id` | خواندن، ویرایش یا حذف سند |
-
-**Gateway**
-
-| مسیر | توضیح |
-|---|---|
-| `GET /health` | سلامت گیت‌وی |
-| `GET /metrics` | متریک‌ها |
-| `GET /ws` | اتصال WebSocket |
-| proxy `/api/*` | هدایت به سرویس سند |
-
-**Export Service**
-
-| مسیر | توضیح |
-|---|---|
-| `GET /health` | سلامت سرویس |
-| `GET /export/:doc_id?format=html\|markdown\|txt` | گرفتن خروجی |
-| `POST /export?format=html\|markdown\|txt` | ساخت خروجی از محتوای ارسالی |
-
----
-
-## 9) جریان احراز هویت (Authentication) — کامل و قدم‌به‌قدم
-
-> **JWT چیست؟**
-> رشتهٔ متنی امضاشده‌ای که سرور هنگام ورود می‌سازد و شامل اطلاعاتی مثل «کاربر کیست» و «تا کی معتبر است» است؛ چون امضا شده، کسی نمی‌تواند محتوایش را بدون فهمیدن سرور تغییر دهد.
-
-### ۹.۱ مدل توکن‌ها
-- الگوریتم امضا: `HS256`
-- کلید مخفی مشترک: `JWT_SECRET`
-- Access Token با `type=access`، اعتبار ۳۰ دقیقه
-- Refresh Token با `type=refresh`، اعتبار ۷ روز
-
-> **چرا دو نوع توکن؟** Access token مثل کارت ورود روزانه است (کوتاه‌مدت، آسیب کم اگر لو برود). Refresh token مثل کارت عضویت بلندمدت که فقط اجازهٔ گرفتن کارت روزانهٔ تازه را می‌دهد.
-
-### ۹.۲ مسیر Login
-1. `POST /auth/login`
-2. بررسی ایمیل و رمز عبور
-3. صدور Access و Refresh Token
-4. استفاده از access token برای API و WebSocket
-
-### ۹.۳ مسیر Register
-1. `POST /auth/register`
-2. بررسی یکتایی ایمیل
-3. هش رمز عبور با bcrypt
-4. ساخت کاربر و صدور توکن‌ها
-
-### ۹.۴ مسیر Refresh
-1. درخواست با refresh token به `POST /auth/refresh`
-2. اگر معتبر بود، access token تازه صادر می‌شود
-3. در غیر این صورت پاسخ `401`
-
-### ۹.۵ کنترل دسترسی در Gateway
-- `/health` و `/metrics` بدون نیاز به توکن
-- بقیهٔ مسیرها به access token معتبر نیاز دارند
-- توکن از هدر Authorization یا `?token=` خوانده می‌شود
-- فقط توکن با `type=access` پذیرفته می‌شود
-
-### ۹.۶ دفاع چندلایه
-گیت‌وی تنها لایهٔ بررسی نیست؛ Document، Auth و Export هم مستقل توکن را چک می‌کنند.
-
-> **نکات امنیتی ناقص فعلی:**
-> - `CheckOrigin` در WebSocket فعلاً permissive است.
-> - CORS در برخی سرویس‌ها بازتر از حد لازم است.
-> - برای production باید whitelist از originها و چرخش دورهٔ secret اضافه شود.
-
----
-
-## 10) مانیتورینگ و مشاهده‌پذیری (Observability)
-
-> **Prometheus** — مثل ثبت قدم روزانه: هر چند ثانیه اعداد مهم را جمع می‌کند.
-> **Grafana** — همان اعداد را به نمودار و داشبورد تبدیل می‌کند.
-> **Jaeger** — مسیر دقیق یک درخواست خاص را بین سرویس‌ها رهگیری می‌کند، مثل رهگیری پستی.
-
-### ۱۰.۱ اجزای استک
-Prometheus، Grafana، Jaeger، redis-exporter، postgres-exporter، node-exporter
-
-### ۱۰.۲ روشن/خاموش کردن
-- متغیر: `OBSERVABILITY_ENABLED=true|false`
-- اسکریپت: `scripts/toggle-observability.sh`
-
-### ۱۰.۳ scrape targets
-`gateway:8080/metrics`, `document-service:8000/metrics`, `redis-exporter:9121/metrics`, `postgres-exporter:9187/metrics`, `node-exporter:9100/metrics` — بازهٔ `۱۵ ثانیه`.
-
-### ۱۰.۴ متریک‌های Gateway
-`gateway_ws_connections`, `gateway_messages_received_total`, `gateway_redis_publishes_total`, `gateway_document_service_requests_total`, `gateway_document_service_request_duration_seconds`
-
-### ۱۰.۵ متریک‌های Document Service
-`document_service_http_requests_total`, `document_service_http_request_duration_seconds`, `document_service_document_saves_total`, `document_service_document_save_errors_total`, `document_service_redis_publishes_total`
-
-### ۱۰.۶ Trace
-- هندلرهای Gateway با `otelhttp` پوشانده می‌شوند.
-- OTLP endpoint: `jaeger:4318`
-- Jaeger UI: پورت `16686`
-
-### ۱۰.۷ Runbook سریع
-1. در Grafana خطا/کندی را پیدا کن.
-2. در Prometheus روی متریک‌های دقیق‌تر جستجو کن.
-3. در Jaeger span کند/خطادار را پیدا کن.
-4. با لاگ‌های واقعی مقایسه کن.
-
-### ۱۰.۸ آدرس‌های عملیاتی
-Prometheus: `http://localhost:9090` — Grafana: `http://localhost:3001` — Jaeger: `http://localhost:16686`
-
----
-
-## 11) حل تعارض در ویرایش همزمان
-
-> **OT در برابر CRDT:** OT با فرمول‌های ریاضی تغییرات را «تبدیل» می‌کند تا با هم جور شوند. CRDT ساختار داده‌ای است که هر ترتیب دریافتی، در نهایت به یک نتیجهٔ یکسان می‌رسد. این پروژه از Yjs (یک کتابخانهٔ CRDT) استفاده می‌کند.
-
-- ادغام زنده کاملاً سمت کلاینت و با Yjs انجام می‌شود.
-- Document Service موتور OT/CRDT مستقلی روی سرور اجرا نمی‌کند.
-- مسئولیت Document Service: نگه‌داشتن state ذخیره‌شده و مدیریت `sync-state`.
-
----
-
-## 12) مشکلاتی که قبلاً پیش آمده و راه‌حلشان
-
-- **تکرار متن:** علتش این بود که کلاینت هم اجازه داشت `sync-state` بفرستد؛ با محدودکردن پذیرش آن فقط از سرویس سند حل شد.
-- **خالی‌شدن سند بعد از رفرش:** با fallback یک‌مرحله‌ای از `content` حل شد.
-- **خطای «ستون yjs_state وجود ندارد»:** با یک migration ترمیمی حل شد.
-
----
-
-## 13) بدهی فنی فعلی
-
-> **بدهی فنی یعنی چه؟** جاهایی که برای سرعت یا سادگی، راه‌حل موقت انتخاب شده که باید بعداً اصلاح شود.
-
-- Export Service هنوز از مسیر قدیمی `/apply/{id}/` استفاده می‌کند.
-- سیاست backfill برای `yjs_state`های قدیمی ساده است.
-- presence/cursor هنوز کامل پیاده نشده.
-
----
-
-## 14) چک‌لیست تست دستی ویرایش همزمان
-
-- [ ] یک سند را در دو مرورگر جدا باز کن.
-- [ ] در A تایپ کن، ببین بلافاصله در B دیده می‌شود.
-- [ ] در هر دو همزمان تایپ کن، ببین تکراری ساخته نمی‌شود.
-- [ ] هر دو مرورگر را رفرش کن، ببین داده یکسان است.
-- [ ] خروجی `GET /api/documents/:id` را چک کن؛ باید `content` و `yjs_state` معتبر داشته باشد.
-
----
-
-## 15) خلاصهٔ نهایی
-
-فقط یک مسیر روی Redis publish می‌کند:
-
-```text
-مسیر Realtime (بدون Redis): Client update → Gateway local broadcast → apply
-مسیر Persistence (با Redis): PATCH save → PostgreSQL → DocumentVersion → sync-state publish (Redis)
+```
+Document Service → Redis → Gateway → Clients
 ```
 
-> **نکتهٔ کلیدی کل این سند:** فقط یک مسیر publish روی Redis وجود دارد: Document Service، بعد از هر ذخیرهٔ موفق در پایگاه‌داده، پیام `sync-state` را منتشر می‌کند. گیت‌وی برای پیام‌های لحظه‌ای `update` دیگر از Redis استفاده نمی‌کند و آن‌ها را مستقیماً broadcast می‌کند.
+So an important point is that the frontend does not communicate directly with all services. Most requests go through the Gateway.
+
+> **ℹ️ Further Simple Explanation**
+> The Gateway is the intermediary. If you want to view a document or verify a token, you tell the Gateway first, and then the Gateway forwards the message to the correct service.
+
+---
+
+## 3) Services and Responsibilities
+
+| Service | Port | Main Job |
+|---------|------|----------|
+| frontend | `3000` | Display UI, open documents, edit documents, send user requests |
+| gateway | `8080` | Main entry point for the frontend, WebSocket, JWT verification, and proxying some APIs |
+| document-service | `8000` | Create, read, update, and delete documents and folders. Also stores `content` and `yjs_state` |
+| auth-service | `8002` | Registration, login, refresh tokens, and user identification |
+| export-service | `8001` | Convert documents to `html`, `markdown`, and `txt` |
+| audit-service | `8003` | Consume `document.events` from Kafka and store document activity history |
+| redis | `6379` | Message broadcasting between services |
+
+> **ℹ️ Why are the services separated?**
+> Because each service has a clear responsibility. This makes the system easier to understand and keeps changes to one part isolated from the others.
+
+---
+
+## 4) Databases
+
+In the current state, the authentication service and the document service use two separate databases.
+
+- **document database**: For documents, folders, and document versions
+- **auth database**: For users of the authentication service
+
+> **✅ Why is this separation important?**
+> Because user data and document data are two different responsibilities. Keeping them separate makes the architecture cleaner and easier to maintain in the future.
+
+---
+
+## 5) Document Data Model
+
+Each document has several important fields:
+
+- `title`: The document title
+- `content`: A simpler version of the content for display and fallback
+- `yjs_state`: The collaborative version of the document for Yjs
+
+In simple terms: `title` is like the document name, `content` is like plain text, and `yjs_state` is like a map that helps multiple people coordinate changes in real-time.
+
+> **ℹ️ Why is Yjs/CRDT implemented?**
+> Because when multiple people work on a document simultaneously, there must be a way to combine everyone's changes without corrupting the content. Yjs uses CRDT to make this coordination simpler and more reliable.
+>
+> In very simple terms: Yjs takes updates and "merges" them so that all users eventually see a coordinated text.
+
+> **ℹ️ Why do we have both content and yjs_state?**
+> Because `yjs_state` is needed for real-time collaboration, but for some simple displays or error conditions, having `content` helps prevent showing an empty document.
+
+Each time a document is saved, a new version is also recorded in `DocumentVersion`.
+
+---
+
+## 6) Authentication Flow
+
+User login is handled with JWT.
+
+1. The user logs in or registers in the frontend.
+2. The frontend sends a request to `auth-service`.
+3. If the credentials are correct, two tokens are returned: `access_token` and `refresh_token`.
+4. The frontend uses the access token for API and WebSocket requests.
+
+### What happens when the access token expires?
+
+1. If a request receives a `401`, the frontend attempts to get a new access token using the `refresh_token`.
+2. If the refresh succeeds, the page reloads and comes back up with the new token.
+3. If the refresh fails, the user is sent to the login page.
+
+> **⚠️ Simple note**
+> The `access_token` is for everyday use. The `refresh_token` is only used to get a new access token.
+
+---
+
+## 7) Opening a Document Flow
+
+When a user clicks on a document or refreshes the page with a document URL, the following path is taken:
+
+1. The frontend determines which document to open from the URL.
+2. The frontend sends a `GET /api/documents/:id` request through the Gateway.
+3. The Gateway forwards the request to the Document Service.
+4. The Document Service reads the document data from the database.
+5. The response is returned to the frontend.
+6. If `yjs_state` is valid, it is applied to Yjs.
+7. If not, `content` is used as a fallback.
+
+This means the frontend does not fetch the document directly from the database; it first asks the Gateway, and then the Gateway tells the document service.
+
+---
+
+## 8) Edit and Sync Flow
+
+This is the most important part of the project architecture.
+
+> **⚠️ Current System Policy**
+> Clients are only updated after changes have been saved in the document service database. This means there is no direct sync from client to other clients.
+
+### Full Change Path
+
+1. The user types in the editor.
+2. Yjs in the frontend records the local change.
+3. The frontend triggers autosave.
+4. The frontend sends a `PATCH /api/documents/:id` request.
+5. The Gateway forwards the request to the Document Service.
+6. The Document Service saves the new content to PostgreSQL.
+7. The Document Service also sends an event to Kafka so that independent services can do their work after this save.
+8. If `yjs_state` exists, the Document Service publishes a `sync-state` message on Redis.
+9. The Gateway, which is a subscriber to this channel, receives the message.
+10. The Gateway broadcasts the same message to clients connected to that document.
+11. Other clients apply that state.
+
+```
+Edit in Browser → PATCH /api/documents/:id → Document Service Save → Redis sync-state → Gateway Broadcast → Other Clients Apply
+```
+
+### Why was this approach chosen?
+
+Because in this architecture, only data that has actually been saved in the database should reach other clients. This means the source of truth is always the Document Service and its database.
+
+> **ℹ️ Simple reminder**
+> This means if two people type at the same time, before everyone sees it, the system ensures that the changes have been recorded in the main document.
+
+---
+
+## 9) Online Users (Presence)
+
+### Data Structure in Redis
+
+A **Sorted Set** named `doc:{docId}:online` is used. Each member is a user's email, and the score is the last activity time (Unix timestamp).
+
+```
+Redis Key:   doc:42:online
+Members:     ["ali@example.com", "sara@example.com"]
+Scores:      [1693584000000, 1693584005000]
+```
+
+### Full Path
+
+1. The user opens a WebSocket. The Gateway extracts the email from the JWT.
+2. When the client sends a `join` message, the Gateway adds the user's email to the Sorted Set with `ZADD`.
+3. The Gateway reads the full list of online users from Redis.
+4. The Gateway publishes a `presence-update` message containing the full list of users on the Redis channel `gateway:events`.
+5. All Gateway instances receive this message and broadcast it to connected clients.
+6. The frontend receives and displays the list of online users.
+
+```
+Client Join → Gateway ZADD Redis → Gateway Get Full List → Publish presence-update → All Gateways Broadcast → Frontend Displays
+```
+
+### Automatic Cleanup
+
+Each member has a TTL of 90 seconds. If a user disconnects (e.g., closes the browser), they are removed from the list after 90 seconds. Also, before reading the list, expired entries are cleaned up with `ZREMRANGEBYSCORE`.
+
+### User Disconnect
+
+1. When the WebSocket is closed, `readPump` detects it.
+2. The Gateway removes the user's email from the Sorted Set with `ZREM`.
+3. The updated list is published and broadcast to all clients.
+
+> **ℹ️ Why a Sorted Set?**
+> A Sorted Set allows us to quickly read the user list (`ZRANGE`), clean up old entries (`ZREMRANGEBYSCORE`), and have entries automatically expire if a Gateway crashes.
+
+---
+
+## 10) Remote Cursors
+
+Each user can see other users' cursors live in the document. The cursor color is determined based on the user's email, and hovering over the cursor shows the user's email.
+
+### Sending Cursor Position
+
+1. Each time the user types or moves the cursor, the frontend sends a `cursor-update` message with the structure `{email, position}`.
+2. The frontend throttles sending with a 30ms debounce to avoid sending excess messages.
+3. The Gateway publishes the message on the Redis channel `gateway:events` so that all Gateway instances receive it.
+
+### Receiving and Displaying
+
+1. The frontend receives the `cursor-update` message from the Gateway.
+2. The active cursors list (`remoteCursors`) is updated.
+3. A ProseMirror plugin called `RemoteCursorsExtension` receives this list and creates a `Decoration.widget` at the appropriate position for each user.
+4. The cursor color is generated from a hash of the user's email so that each user has a consistent color.
+
+> **ℹ️ Why rebuild on every transaction?**
+> The TipTap editor uses Yjs for synchronization. When a user types, Yjs creates a transaction that completely replaces the document content. If we used `DecorationSet.map`, cursor positions would become incorrect and cursors would disappear. That is why on every transaction, cursors are rebuilt based on the new document position.
+
+### Overall Flow
+
+```
+User Types → Send cursor-update (30ms debounce) → Gateway Publish Redis → All Gateways Broadcast → Frontend Updates Plugin State → Rebuild Decorations
+```
+
+---
+
+## 11) Audit Service and Kafka
+
+After the Document Service saves changes to PostgreSQL, it publishes an independent event to Kafka.
+
+This event is sent as a `document.updated` message and includes the document ID, user ID, version, timestamp, and client ID.
+
+The Audit Service independently consumes this topic and records each event in the `audit_activity` table.
+
+- Kafka topic: `document.events`
+- Audit Service: `/api/documents/:id/activity`
+- Activity storage via ORM with SQLAlchemy
+
+> **ℹ️ Why Kafka?**
+> Kafka allows downstream services to consume persistence events without a direct dependency on the Document Service.
+
+---
+
+## 12) Export Flow
+
+For exports, the frontend does not go directly to the export-service. Like other APIs, it only calls the Gateway.
+
+1. The user clicks Export in the frontend.
+2. The frontend sends a `POST /api/export?format=...` request to the Gateway.
+3. The Gateway proxies the request to the Export Service.
+4. The Export Service converts the content to the desired format.
+5. The output file is returned to the browser.
+
+The Export Service only handles text conversion. The browser itself downloads the file and presents it to the user.
+
+> **✅ Benefit of this approach**
+> The frontend only knows one main entry point: the Gateway. This makes the architecture cleaner and simpler.
+
+---
+
+## 13) Monitoring and Observability
+
+This section is for understanding whether the system is healthy, and if a problem occurs, where to look for the cause.
+
+### Key Tools
+
+- **Prometheus**: Collecting metrics
+- **Grafana**: Displaying metrics on dashboards
+- **Jaeger**: Viewing traces
+- **redis-exporter**: Redis metrics
+- **postgres-exporter**: PostgreSQL metrics
+- **node-exporter**: Host system metrics
+
+> **ℹ️ What do Grafana and Prometheus mean?**
+> Prometheus is like an eye that collects numbers and service statuses. Grafana is like a display board that shows these numbers as charts and tables so you can quickly see what is wrong.
+
+### Important Metrics
+
+- Number of WebSocket connections in Gateway
+- Number of messages received by Gateway
+- Number of successful document saves
+- Number of document save errors
+- Number of Redis publishes from the Document Service
+
+### Simple Monitoring Flow
+
+1. Services produce metrics.
+2. Prometheus collects these metrics.
+3. Grafana displays them.
+4. If tracing is enabled, traces go to Jaeger.
+
+> **ℹ️ In very simple terms**
+> Metrics tell us where we have problems. Traces help us understand exactly in which path the problem occurred.
+
+---
+
+## 14) Current Limitations
+
+- Since sync only happens after save, real-time is slightly slower than direct broadcast.
+- In some cases, fallback display depends on `content`.
+- This is an educational project, so some security and production-level configurations are still kept simple.
+
+---
+
+## 15) Final Summary
+
+If we want to describe the entire architecture in a few sentences:
+
+- The frontend displays the user interface.
+- The Gateway is the main entry point of the system.
+- The Document Service is the source of truth for documents.
+- The Auth Service is the source of truth for users and tokens.
+- Redis is used as the canonical message broadcaster.
+- Clients are only updated after changes are saved in the document database.
+
+> **✅ One very important sentence**
+> In this architecture, the final version of the document is always determined by the Document Service, not by the client itself.

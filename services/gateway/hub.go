@@ -26,6 +26,7 @@ type Client struct {
 	conn      *websocket.Conn
 	send      chan []byte
 	docID     int
+	email     string
 	closeOnce sync.Once
 }
 
@@ -36,8 +37,9 @@ func (c *Client) closeSend() {
 }
 
 type broadcastEvent struct {
-	docID   int
-	payload []byte
+	docID    int
+	payload  []byte
+	except   *Client
 }
 
 type Hub struct {
@@ -63,6 +65,9 @@ func (h *Hub) run(ctx context.Context) {
 				h.mu.Lock()
 				room := h.rooms[event.docID]
 				for client := range room {
+					if client == event.except {
+						continue
+					}
 					select {
 					case client.send <- event.payload:
 					default:
@@ -111,7 +116,9 @@ func (h *Hub) join(c *Client, docID int) {
 	h.mu.Unlock()
 }
 
-func (h *Hub) unregister(c *Client) {
+func (h *Hub) unregister(ctx context.Context, c *Client, rdb *redis.Client) {
+	docID := c.docID
+	email := c.email
 	h.mu.Lock()
 	if c.docID > 0 {
 		if room, ok := h.rooms[c.docID]; ok {
@@ -125,6 +132,11 @@ func (h *Hub) unregister(c *Client) {
 	h.mu.Unlock()
 	c.closeSend()
 	gatewayWsConnections.Dec()
+
+	if docID > 0 && email != "" {
+		removePresence(ctx, rdb, docID, email)
+		broadcastPresence(ctx, rdb, h, docID)
+	}
 }
 
 func (h *Hub) broadcastToDoc(docID int, payload []byte) {
@@ -134,11 +146,29 @@ func (h *Hub) broadcastToDoc(docID int, payload []byte) {
 	h.broadcast <- broadcastEvent{docID: docID, payload: payload}
 }
 
+func (h *Hub) broadcastToDocExcept(docID int, payload []byte, except *Client) {
+	if docID <= 0 {
+		return
+	}
+	h.broadcast <- broadcastEvent{docID: docID, payload: payload, except: except}
+}
+
+type cursorData struct {
+	Email    string `json:"email"`
+	Position int    `json:"position"`
+}
+
 type gatewayEnvelope struct {
-	Type     string `json:"type"`
-	DocID    int    `json:"docId"`
-	ClientID string `json:"clientId"`
-	Update   string `json:"update,omitempty"`
+	Type     string      `json:"type"`
+	DocID    int         `json:"docId"`
+	ClientID string      `json:"clientId"`
+	Update   string      `json:"update,omitempty"`
+	Users    []string    `json:"users,omitempty"`
+	Cursor   *cursorData `json:"cursor,omitempty"`
+}
+
+func encodeGatewayEnvelope(env gatewayEnvelope) ([]byte, error) {
+	return json.Marshal(env)
 }
 
 func decodeGatewayEnvelope(payload []byte) (*gatewayEnvelope, error) {
@@ -181,7 +211,7 @@ func (c *Client) writePump() {
 func (c *Client) readPump(ctx context.Context, h *Hub, rdb *redis.Client) {
 	defer func() {
 		c.conn.Close()
-		h.unregister(c)
+		h.unregister(ctx, c, rdb)
 	}()
 
 	tracer := otel.Tracer("gateway.websocket")
@@ -214,6 +244,17 @@ func (c *Client) readPump(ctx context.Context, h *Hub, rdb *redis.Client) {
 		switch envelope.Type {
 		case "join", "update":
 			h.join(c, envelope.DocID)
+			if envelope.Type == "join" && c.email != "" {
+				addPresence(ctx, rdb, envelope.DocID, c.email)
+				broadcastPresence(ctx, rdb, h, envelope.DocID)
+			}
+		case "cursor-update":
+			h.join(c, envelope.DocID)
+			payload, _ := encodeGatewayEnvelope(*envelope)
+			h.broadcastToDocExcept(envelope.DocID, payload, c)
+			if rdb != nil {
+				rdb.Publish(ctx, "gateway:events", payload)
+			}
 		default:
 			span.End()
 			continue
@@ -239,7 +280,16 @@ func serveWs(h *Hub, rdb *redis.Client, w http.ResponseWriter, r *http.Request) 
 		log.Printf("upgrade error: %v", err)
 		return
 	}
-	client := &Client{conn: conn, send: make(chan []byte, 256)}
+
+	// Extract email from JWT for presence tracking.
+	email := ""
+	if tokenStr, err := extractToken(r); err == nil {
+		if claims, err := verifyAccessToken(tokenStr); err == nil {
+			email = claims.Email
+		}
+	}
+
+	client := &Client{conn: conn, send: make(chan []byte, 256), email: email}
 	h.register(client)
 	go client.writePump()
 	client.readPump(r.Context(), h, rdb)

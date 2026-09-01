@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import ShareModal from './ShareModal'
 
 export interface DocMeta {
   id: number
   folder_id: number | null
   title: string
   updated_at: string
+  role?: string
+  granted_by?: string
 }
 
 export interface FolderMeta {
@@ -91,14 +94,29 @@ const IconDoc = () => (
   </svg>
 )
 
+const IconShare = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+  </svg>
+)
+
+const IconLink = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+  </svg>
+)
+
 // ─── Doc row ────────────────────────────────────────────────────────────────
 
-function DocRow({ doc, active, onSelect, onRename, onDelete, indented }: {
+function DocRow({ doc, active, onSelect, onRename, onDelete, onShare, indented }: {
   doc: DocMeta
   active: boolean
   onSelect: () => void
   onRename: (v: string) => void
   onDelete: () => void
+  onShare?: () => void
   indented?: boolean
 }) {
   const [renaming, setRenaming] = useState(false)
@@ -108,21 +126,33 @@ function DocRow({ doc, active, onSelect, onRename, onDelete, indented }: {
       className={`sidebar-item sidebar-item--doc${active ? ' sidebar-item--active' : ''}${indented ? ' sidebar-item--indented' : ''}`}
       onClick={onSelect}
     >
-      <span className="sidebar-item-icon"><IconDoc /></span>
+      <span className="sidebar-item-icon">
+        {doc.role ? <IconLink /> : <IconDoc />}
+      </span>
       {renaming ? (
         <RenameInput value={doc.title} onCommit={v => { setRenaming(false); onRename(v) }} />
       ) : (
         <>
           <div className="sidebar-item-body">
             <span className="sidebar-item-title">{doc.title}</span>
+            {doc.role && <span className="sidebar-item-role">Shared as {doc.role} by {doc.granted_by}</span>}
           </div>
           <div className="sidebar-item-actions">
-            <button className="sidebar-action-btn" title="Rename" onClick={e => { e.stopPropagation(); setRenaming(true) }}>
-              <IconEdit />
-            </button>
-            <button className="sidebar-action-btn sidebar-action-btn--danger" title="Delete" onClick={e => { e.stopPropagation(); onDelete() }}>
-              <IconTrash />
-            </button>
+            {onShare && !doc.role && (
+              <button className="sidebar-action-btn" title="Share" onClick={e => { e.stopPropagation(); onShare() }}>
+                <IconShare />
+              </button>
+            )}
+            {!doc.role && (
+              <>
+                <button className="sidebar-action-btn" title="Rename" onClick={e => { e.stopPropagation(); setRenaming(true) }}>
+                  <IconEdit />
+                </button>
+                <button className="sidebar-action-btn sidebar-action-btn--danger" title="Delete" onClick={e => { e.stopPropagation(); onDelete() }}>
+                  <IconTrash />
+                </button>
+              </>
+            )}
           </div>
         </>
       )}
@@ -132,7 +162,7 @@ function DocRow({ doc, active, onSelect, onRename, onDelete, indented }: {
 
 // ─── Folder row ─────────────────────────────────────────────────────────────
 
-function FolderRow({ folder, activeDocId, onSelectDoc, onRenameFolder, onDeleteFolder, onAddDoc, onRenameDoc, onDeleteDoc }: {
+function FolderRow({ folder, activeDocId, onSelectDoc, onRenameFolder, onDeleteFolder, onAddDoc, onRenameDoc, onDeleteDoc, onShareDoc }: {
   folder: FolderMeta
   activeDocId: number | null
   onSelectDoc: (doc: DocMeta) => void
@@ -141,6 +171,7 @@ function FolderRow({ folder, activeDocId, onSelectDoc, onRenameFolder, onDeleteF
   onAddDoc: () => void
   onRenameDoc: (id: number, title: string) => void
   onDeleteDoc: (id: number) => void
+  onShareDoc?: (doc: DocMeta) => void
 }) {
   const [open, setOpen] = useState(true)
   const [renaming, setRenaming] = useState(false)
@@ -185,6 +216,7 @@ function FolderRow({ folder, activeDocId, onSelectDoc, onRenameFolder, onDeleteF
               onSelect={() => onSelectDoc(doc)}
               onRename={title => onRenameDoc(doc.id, title)}
               onDelete={() => onDeleteDoc(doc.id)}
+              onShare={onShareDoc ? () => onShareDoc(doc) : undefined}
               indented
             />
           ))}
@@ -203,7 +235,9 @@ export default function Sidebar({ activeDocId, onSelect, onDocsLoaded }: Sidebar
   const { accessToken, authFetch } = useAuth()
   const [folders, setFolders] = useState<FolderMeta[]>([])
   const [rootDocs, setRootDocs] = useState<DocMeta[]>([])
+  const [sharedDocs, setSharedDocs] = useState<DocMeta[]>([])
   const [loading, setLoading] = useState(true)
+  const [shareDoc, setShareDoc] = useState<DocMeta | null>(null)
 
   const hdrs = useCallback(() => ({
     'Content-Type': 'application/json',
@@ -213,21 +247,34 @@ export default function Sidebar({ activeDocId, onSelect, onDocsLoaded }: Sidebar
   const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
-      const resp = await authFetch(`${apiBase()}/documents`, { headers: hdrs() })
-      if (!resp.ok) return
-      const data = await resp.json()
-      const nextFolders = data.folders ?? []
-      const nextRootDocs = data.documents ?? []
-      setFolders(nextFolders)
-      setRootDocs(nextRootDocs)
+      const [docsResp, sharedResp] = await Promise.all([
+        authFetch(`${apiBase()}/documents`, { headers: hdrs() }),
+        authFetch(`${apiBase()}/shared-with-me`, { headers: hdrs() }),
+      ])
+      let nextFolders: FolderMeta[] = []
+      let nextRootDocs: DocMeta[] = []
+      if (docsResp.ok) {
+        const data = await docsResp.json()
+        nextFolders = data.folders ?? []
+        nextRootDocs = data.documents ?? []
+        setFolders(nextFolders)
+        setRootDocs(nextRootDocs)
+      }
+      let nextSharedDocs: DocMeta[] = []
+      if (sharedResp.ok) {
+        const data = await sharedResp.json()
+        nextSharedDocs = data.documents ?? []
+        setSharedDocs(nextSharedDocs)
+      }
       onDocsLoaded?.([
         ...nextRootDocs,
         ...nextFolders.flatMap((folder: FolderMeta) => folder.documents ?? []),
+        ...nextSharedDocs,
       ])
     } finally {
       setLoading(false)
     }
-  }, [hdrs, onDocsLoaded])
+  }, [hdrs, onDocsLoaded, authFetch])
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
@@ -344,6 +391,7 @@ export default function Sidebar({ activeDocId, onSelect, onDocsLoaded }: Sidebar
               onAddDoc={() => createDoc(folder.id)}
               onRenameDoc={(id, title) => renameDoc(id, title, folder.id)}
               onDeleteDoc={id => deleteDoc(id, folder.id)}
+              onShareDoc={doc => setShareDoc(doc)}
             />
           ))}
 
@@ -356,6 +404,7 @@ export default function Sidebar({ activeDocId, onSelect, onDocsLoaded }: Sidebar
               onSelect={() => onSelect(doc)}
               onRename={title => renameDoc(doc.id, title)}
               onDelete={() => deleteDoc(doc.id)}
+              onShare={() => setShareDoc(doc)}
             />
           ))}
 
@@ -363,6 +412,37 @@ export default function Sidebar({ activeDocId, onSelect, onDocsLoaded }: Sidebar
             <p className="sidebar-empty">No documents yet</p>
           )}
         </ul>
+      )}
+
+      {/* Shared with me */}
+      {!loading && sharedDocs.length > 0 && (
+        <div className="sidebar-shared">
+          <div className="sidebar-shared-header">
+            <IconLink />
+            <span className="sidebar-shared-title">Shared with me</span>
+          </div>
+          <ul className="sidebar-list sidebar-list--shared">
+            {sharedDocs.map(doc => (
+              <DocRow
+                key={doc.id}
+                doc={doc}
+                active={doc.id === activeDocId}
+                onSelect={() => onSelect(doc)}
+                onRename={() => {}}
+                onDelete={() => {}}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Share modal */}
+      {shareDoc && (
+        <ShareModal
+          docId={shareDoc.id}
+          docTitle={shareDoc.title}
+          onClose={() => { setShareDoc(null); fetchAll() }}
+        />
       )}
     </aside>
   )

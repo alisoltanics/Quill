@@ -109,7 +109,7 @@ export default function Home() {
           />
           <main className="layout-main">
             {activeDoc ? (
-              <Chat key={activeDoc.id} docId={activeDoc.id} docTitle={activeDoc.title} />
+              <Chat key={activeDoc.id} docId={activeDoc.id} docTitle={activeDoc.title} role={activeDoc.role} />
             ) : (
               <div className="empty-state">
                 <div className="empty-state__inner">

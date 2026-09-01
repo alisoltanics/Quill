@@ -22,11 +22,25 @@ from .metrics import (
     REQUEST_LATENCY,
     get_metrics_payload,
 )
-from .models import Document, DocumentVersion, Folder
+from .models import Document, DocumentPermission, DocumentVersion, Folder
+from .serializers import (
+    DocumentCreateSerializer,
+    DocumentDetailSerializer,
+    DocumentPermissionSerializer,
+    DocumentSerializer,
+    DocumentUpdateSerializer,
+    FolderCreateSerializer,
+    FolderDetailSerializer,
+    FolderSerializer,
+    PermissionUpdateSerializer,
+    ShareCreateSerializer,
+    SharedWithMeSerializer,
+)
 
 logger = logging.getLogger(__name__)
 _JWT_SECRET = os.environ.get("JWT_SECRET", "change-me-in-production")
 _kafka_producer = None
+_UNSET = object()  # sentinel to distinguish "not provided" from None
 
 
 def _get_kafka_producer():
@@ -116,6 +130,10 @@ def _uid(request) -> int:
     return int(request.user["sub"])
 
 
+def _user_email(request) -> str:
+    return request.user.get("email", "")
+
+
 # ─── Helpers ───────────────────────────────────────────────────────────────────
 
 def _publish(doc: Document):
@@ -146,27 +164,6 @@ def _record(request, status, started):
     REQUEST_LATENCY.labels(**lbl).observe(time.time() - started)
 
 
-def _doc_json(doc: Document) -> dict:
-    return {
-        "id": doc.pk,
-        "folder_id": doc.folder_id,
-        "title": doc.title,
-        "content": doc.content,
-        "yjs_state": doc.yjs_state,
-        "created_at": doc.created_at.isoformat(),
-        "updated_at": doc.updated_at.isoformat(),
-    }
-
-
-def _folder_json(folder: Folder) -> dict:
-    return {
-        "id": folder.pk,
-        "name": folder.name,
-        "created_at": folder.created_at.isoformat(),
-        "updated_at": folder.updated_at.isoformat(),
-    }
-
-
 _AUTH = {"authentication_classes": [JWTAuthentication], "permission_classes": [IsAuthenticated]}
 
 
@@ -189,12 +186,14 @@ class FolderListView(APIView):
 
     def get(self, request):
         folders = Folder.objects.filter(user_id=_uid(request))
-        return JsonResponse({"folders": [_folder_json(f) for f in folders]})
+        return JsonResponse({"folders": FolderSerializer(folders, many=True).data})
 
     def post(self, request):
-        name = (request.data or {}).get("name", "New Folder")
-        folder = Folder.objects.create(user_id=_uid(request), name=str(name))
-        return JsonResponse(_folder_json(folder), status=201)
+        serializer = FolderCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return JsonResponse({"error": serializer.errors}, status=400)
+        folder = Folder.objects.create(user_id=_uid(request), **serializer.validated_data)
+        return JsonResponse(FolderSerializer(folder).data, status=201)
 
 
 class FolderDetailView(APIView):
@@ -211,17 +210,16 @@ class FolderDetailView(APIView):
         folder = self._get(request, pk)
         if folder is None:
             return JsonResponse({"error": "not found"}, status=404)
-        name = (request.data or {}).get("name")
-        if name:
-            folder.name = str(name)
-            folder.save()
-        return JsonResponse(_folder_json(folder))
+        serializer = FolderSerializer(folder, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return JsonResponse({"error": serializer.errors}, status=400)
+        serializer.save()
+        return JsonResponse(FolderSerializer(folder).data)
 
     def delete(self, request, pk):
         folder = self._get(request, pk)
         if folder is None:
             return JsonResponse({"error": "not found"}, status=404)
-        # Unlink documents from folder (SET_NULL) then delete folder
         folder.delete()
         return JsonResponse({"deleted": pk})
 
@@ -233,30 +231,29 @@ class DocumentListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Return folders with their docs + root-level docs in one call
         uid = _uid(request)
         folders = Folder.objects.filter(user_id=uid).prefetch_related("documents")
         root_docs = Document.objects.filter(user_id=uid, folder__isnull=True)
+
         return JsonResponse({
-            "folders": [
-                {**_folder_json(f), "documents": [_doc_json(d) for d in f.documents.all()]}
-                for f in folders
-            ],
-            "documents": [_doc_json(d) for d in root_docs],
+            "folders": FolderDetailSerializer(folders, many=True).data,
+            "documents": DocumentSerializer(root_docs, many=True).data,
         })
 
     def post(self, request):
-        payload = request.data or {}
-        title = payload.get("title", "Untitled")
-        folder_id = payload.get("folder_id")
+        serializer = DocumentCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return JsonResponse({"error": serializer.errors}, status=400)
+        data = serializer.validated_data
+        folder_id = data.pop("folder_id", None)
         folder = None
         if folder_id:
             try:
                 folder = Folder.objects.get(pk=folder_id, user_id=_uid(request))
             except Folder.DoesNotExist:
                 return JsonResponse({"error": "folder not found"}, status=404)
-        doc = Document.objects.create(user_id=_uid(request), title=str(title), folder=folder)
-        return JsonResponse(_doc_json(doc), status=201)
+        doc = Document.objects.create(user_id=_uid(request), folder=folder, **data)
+        return JsonResponse(DocumentSerializer(doc).data, status=201)
 
 
 class DocumentDetailView(APIView):
@@ -264,58 +261,82 @@ class DocumentDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def _get_doc(self, request, pk):
+        """Return the document if the user has at least viewer access."""
+        uid = _uid(request)
+        email = _user_email(request)
         try:
-            return Document.objects.get(pk=pk, user_id=_uid(request))
+            doc = Document.objects.get(pk=pk)
         except Document.DoesNotExist:
             return None
+        # Owner always has access
+        if doc.user_id == uid:
+            return doc
+        # Check permission table by email
+        if _has_access(pk, email, "viewer"):
+            return doc
+        return None
 
     def get(self, request, pk):
         doc = self._get_doc(request, pk)
         if doc is None:
             return JsonResponse({"error": "not found"}, status=404)
-        versions = [
-            {
-                "id": v.pk,
-                "client_id": v.client_id,
-                "yjs_state": v.yjs_state,
-                "created_at": v.created_at.isoformat(),
-            }
-            for v in doc.versions.order_by("-created_at")[:20]
-        ]
-        data = _doc_json(doc)
-        data["versions"] = versions
-        return JsonResponse(data)
+        return JsonResponse(DocumentDetailSerializer(doc).data)
 
     def patch(self, request, pk):
         started = time.time()
-        doc = self._get_doc(request, pk)
-        if doc is None:
+        uid = _uid(request)
+        email = _user_email(request)
+
+        # Need at least editor role to modify
+        is_owner = Document.objects.filter(pk=pk, user_id=uid).exists()
+        if not is_owner and not _has_access(pk, email, "editor"):
+            _record(request, "403", started)
+            return JsonResponse({"error": "forbidden"}, status=403)
+
+        try:
+            doc = Document.objects.get(pk=pk)
+        except Document.DoesNotExist:
+            _record(request, "404", started)
             return JsonResponse({"error": "not found"}, status=404)
 
-        payload = request.data or {}
-        if "title" in payload:
-            doc.title = str(payload["title"])
+        serializer = DocumentUpdateSerializer(data=request.data, partial=True)
+        if not serializer.is_valid():
+            return JsonResponse({"error": serializer.errors}, status=400)
+        data = serializer.validated_data
 
-        # Move to a different folder (or root)
-        if "folder_id" in payload:
-            fid = payload["folder_id"]
-            if fid is None:
+        # Resolve aliases
+        title = data.get("title")
+        folder_id = data.get("folder_id", _UNSET)
+        content = data.get("content", _UNSET)
+        yjs_state = data.get("yjs_state") or data.get("yjsState")
+        full_replace = data.get("full", True)
+        client_id = data.get("client_id") or data.get("clientId")
+
+        if title is not None:
+            doc.title = title
+
+        # Move to a different folder (or root) — only owner can move
+        if folder_id is not _UNSET:
+            if not is_owner:
+                _record(request, "403", started)
+                return JsonResponse({"error": "forbidden"}, status=403)
+            if folder_id is None:
                 doc.folder = None
             else:
                 try:
-                    doc.folder = Folder.objects.get(pk=fid, user_id=_uid(request))
+                    doc.folder = Folder.objects.get(pk=folder_id, user_id=_uid(request))
                 except Folder.DoesNotExist:
                     return JsonResponse({"error": "folder not found"}, status=404)
 
-        full_replace = bool(payload.get("full", True))
-        if "content" in payload:
-            text = str(payload["content"])
+        has_content = content is not _UNSET
+        has_yjs = yjs_state is not None
+        if has_content:
+            text = str(content)
             doc.content = text if full_replace else (f"{doc.content}\n{text}" if doc.content else text)
-        if "yjs_state" in payload or "yjsState" in payload:
-            doc.yjs_state = str(payload.get("yjs_state") or payload.get("yjsState") or "")
+        if has_yjs:
+            doc.yjs_state = str(yjs_state)
 
-        if "content" in payload or "yjs_state" in payload or "yjsState" in payload:
-            client_id = payload.get("clientId") or payload.get("client_id")
+        if has_content or has_yjs:
             try:
                 doc.save()
                 DOCUMENT_SAVE_COUNT.labels(mode="full" if full_replace else "append").inc()
@@ -336,11 +357,192 @@ class DocumentDetailView(APIView):
             doc.save()
 
         _record(request, "200", started)
-        return JsonResponse(_doc_json(doc))
+        return JsonResponse(DocumentSerializer(doc).data)
 
     def delete(self, request, pk):
+        started = time.time()
+        # Only owner can delete
+        doc = Document.objects.filter(pk=pk, user_id=_uid(request)).first()
+        if doc is None:
+            _record(request, "404", started)
+            return JsonResponse({"error": "not found"}, status=404)
+        doc.delete()
+        _record(request, "200", started)
+        return JsonResponse({"deleted": pk})
+
+
+# ─── Sharing helpers ──────────────────────────────────────────────────────────
+
+def _get_user_role(doc_id: int, user_email: str) -> str | None:
+    """Return the role string for *user_email* on *doc_id*, or None."""
+    perm = (
+        DocumentPermission.objects
+        .filter(document_id=doc_id, user_email=user_email)
+        .values_list("role", flat=True)
+        .first()
+    )
+    return perm
+
+
+def _has_access(doc_id: int, user_email: str, minimum: str = "viewer", user_id: int | None = None) -> bool:
+    """Check whether *user_email* has at least *minimum* role on the document.
+
+    The document owner (matched by *user_id* against ``Document.user_id``) is
+    always considered to have the ``owner`` role even if no ``DocumentPermission``
+    record exists.
+    """
+    hierarchy = {"viewer": 0, "editor": 1, "owner": 2}
+    role = _get_user_role(doc_id, user_email)
+    if role is None and user_id is not None:
+        try:
+            doc = Document.objects.get(pk=doc_id, user_id=user_id)
+            role = DocumentPermission.ROLE_OWNER
+        except Document.DoesNotExist:
+            pass
+    if role is None:
+        return False
+    return hierarchy.get(role, -1) >= hierarchy.get(minimum, -1)
+
+
+
+
+# ─── Sharing views ────────────────────────────────────────────────────────────
+
+class DocumentShareView(APIView):
+    """Share a document with another user or list existing permissions.
+
+    POST  /api/documents/<id>/share   — grant access
+    GET   /api/documents/<id>/permissions — list all collaborators
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def _get_doc(self, request, pk):
+        """Return the document if the user is the owner."""
+        try:
+            return Document.objects.get(pk=pk, user_id=_uid(request))
+        except Document.DoesNotExist:
+            return None
+
+    def post(self, request, pk):
         doc = self._get_doc(request, pk)
         if doc is None:
             return JsonResponse({"error": "not found"}, status=404)
-        doc.delete()
-        return JsonResponse({"deleted": pk})
+
+        serializer = ShareCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return JsonResponse({"error": serializer.errors}, status=400)
+        target_email = serializer.validated_data["email"]
+        role = serializer.validated_data["role"]
+
+        # Cannot share with yourself
+        if target_email == _user_email(request):
+            return JsonResponse({"error": "cannot share with yourself"}, status=400)
+
+        perm, created = DocumentPermission.objects.update_or_create(
+            document=doc,
+            user_email=target_email,
+            defaults={
+                "role": role,
+                "granted_by": _user_email(request),
+            },
+        )
+        return JsonResponse(
+            DocumentPermissionSerializer(perm).data,
+            status=201 if created else 200,
+        )
+
+    def get(self, request, pk):
+        doc = self._get_doc(request, pk)
+        if doc is None:
+            return JsonResponse({"error": "not found"}, status=404)
+
+        perms = DocumentPermission.objects.filter(document=doc)
+        return JsonResponse({"permissions": DocumentPermissionSerializer(perms, many=True).data})
+
+
+class DocumentPermissionDetailView(APIView):
+    """Update or revoke a specific user's permission.
+
+    PATCH  /api/documents/<id>/permissions/<email>  — change role
+    DELETE /api/documents/<id>/permissions/<email>  — revoke access
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk, user_email):
+        # Only the owner can modify permissions
+        if not _has_access(pk, _user_email(request), "owner", user_id=_uid(request)):
+            return JsonResponse({"error": "forbidden"}, status=403)
+
+        serializer = PermissionUpdateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return JsonResponse({"error": serializer.errors}, status=400)
+        role = serializer.validated_data["role"]
+
+        try:
+            perm = DocumentPermission.objects.get(document_id=pk, user_email=user_email)
+        except DocumentPermission.DoesNotExist:
+            return JsonResponse({"error": "permission not found"}, status=404)
+
+        # Cannot remove the last owner
+        if perm.role == DocumentPermission.ROLE_OWNER and role != DocumentPermission.ROLE_OWNER:
+            owner_count = DocumentPermission.objects.filter(
+                document_id=pk, role=DocumentPermission.ROLE_OWNER
+            ).count()
+            if owner_count <= 1:
+                return JsonResponse({"error": "cannot remove the last owner"}, status=400)
+
+        perm.role = role
+        perm.save(update_fields=["role", "updated_at"])
+        return JsonResponse(DocumentPermissionSerializer(perm).data)
+
+    def delete(self, request, pk, user_email):
+        # Only the owner can revoke permissions
+        if not _has_access(pk, _user_email(request), "owner", user_id=_uid(request)):
+            return JsonResponse({"error": "forbidden"}, status=403)
+
+        try:
+            perm = DocumentPermission.objects.get(document_id=pk, user_email=user_email)
+        except DocumentPermission.DoesNotExist:
+            return JsonResponse({"error": "permission not found"}, status=404)
+
+        # Cannot remove the last owner
+        if perm.role == DocumentPermission.ROLE_OWNER:
+            owner_count = DocumentPermission.objects.filter(
+                document_id=pk, role=DocumentPermission.ROLE_OWNER
+            ).count()
+            if owner_count <= 1:
+                return JsonResponse({"error": "cannot remove the last owner"}, status=400)
+
+        perm.delete()
+        return JsonResponse({"deleted": user_email})
+
+
+class SharedWithMeView(APIView):
+    """List documents that other users have shared with the current user.
+
+    GET /api/shared-with-me
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        email = _user_email(request)
+        perm_ids = (
+            DocumentPermission.objects
+            .filter(user_email=email)
+            .exclude(role=DocumentPermission.ROLE_OWNER)
+            .values_list("document_id", flat=True)
+        )
+        docs = Document.objects.filter(pk__in=perm_ids)
+        result = []
+        for doc in docs:
+            perm = DocumentPermission.objects.filter(document_id=doc.pk, user_email=email).first()
+            doc._shared_role = perm.role if perm else None
+            doc._shared_granted_by = perm.granted_by if perm else None
+            result.append(doc)
+        return JsonResponse({"documents": SharedWithMeSerializer(result, many=True).data})

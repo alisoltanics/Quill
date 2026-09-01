@@ -874,3 +874,286 @@ body {
   color: #4b5563;
   line-height: 1.75;
 }
+
+/* ─── Sidebar: shared docs section ───────────────────────── */
+.sidebar-shared {
+  border-top: 1px solid #f0f1f3;
+  margin-top: auto;
+}
+
+.sidebar-shared-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px 6px;
+  color: #6b7280;
+}
+
+.sidebar-shared-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #9ca3af;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sidebar-list--shared {
+  padding: 0 0 6px;
+}
+
+.sidebar-item-role {
+  font-size: 10.5px;
+  color: #9ca3af;
+  text-transform: capitalize;
+}
+
+/* ─── Share modal ────────────────────────────────────────── */
+.share-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.share-modal {
+  background: #fff;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 460px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.share-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 20px 0;
+}
+
+.share-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.share-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.share-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  color: #9ca3af;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+}
+
+.share-close:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.share-form {
+  display: flex;
+  gap: 6px;
+  padding: 16px 20px;
+  align-items: center;
+}
+
+.share-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.share-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.share-select,
+.share-role-select {
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  outline: none;
+}
+
+.share-select:focus,
+.share-role-select:focus {
+  border-color: #2563eb;
+}
+
+.share-btn {
+  flex-shrink: 0;
+}
+
+.share-error {
+  margin: 0;
+  padding: 0 20px 12px;
+  font-size: 13px;
+  color: #dc2626;
+}
+
+.share-permissions {
+  border-top: 1px solid #f0f1f3;
+  padding: 14px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.share-permissions-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9ca3af;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.share-empty {
+  margin: 0;
+  font-size: 13px;
+  color: #9ca3af;
+  text-align: center;
+  padding: 1rem;
+}
+
+.share-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.share-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: background 0.1s;
+}
+
+.share-list-item:hover {
+  background: #f9fafb;
+}
+
+.share-list-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.share-list-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.share-list-id {
+  font-size: 13.5px;
+  color: #374151;
+  font-weight: 500;
+}
+
+.share-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 99px;
+  letter-spacing: 0.02em;
+}
+
+.share-badge--owner {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.share-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.share-list-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: #9ca3af;
+  transition: background 0.1s, color 0.1s;
+}
+
+.share-list-remove:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* ─── Remote cursors ─────────────────────────────────────── */
+.remote-cursor-wrapper {
+  position: relative;
+  display: inline;
+  padding: 0 2px;
+  cursor: default;
+}
+
+.remote-cursor-wrapper:hover > .remote-cursor-label {
+  opacity: 1 !important;
+}

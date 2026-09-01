@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Simple Project Architecture Guide</title>
+  <title>System Architecture Guide</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #f3efe5;
@@ -40,7 +40,7 @@
         radial-gradient(circle at top left, rgba(15, 76, 129, 0.18), transparent 28%),
         linear-gradient(180deg, var(--bg-accent) 0, var(--bg) 260px);
       color: var(--text);
-      font-family: "Vazirmatn", Tahoma, "Noto Naskh Arabic", sans-serif;
+      font-family: "Inter", "Space Grotesk", sans-serif;
       line-height: 2.05;
       font-size: 16.5px;
     }
@@ -98,7 +98,7 @@
     }
 
     h1 {
-      font-family: "Space Grotesk", "Vazirmatn", sans-serif;
+      font-family: "Space Grotesk", sans-serif;
       font-size: clamp(2.1rem, 4vw, 3.4rem);
       color: #102a56;
       max-width: 12ch;
@@ -174,7 +174,7 @@
 
     .toc ol {
       margin: 0;
-      padding-right: 20px;
+      padding-left: 20px;
       columns: 2;
       gap: 20px;
     }
@@ -193,7 +193,7 @@
 
     .toc a:hover {
       color: var(--accent-2);
-      transform: translateX(-2px);
+      transform: translateX(2px);
     }
 
     .section {
@@ -208,16 +208,16 @@
       content: "";
       position: absolute;
       top: 0;
-      right: 0;
+      left: 0;
       width: 120px;
       height: 4px;
       background: linear-gradient(90deg, var(--accent), var(--accent-2));
-      border-bottom-left-radius: 999px;
+      border-bottom-right-radius: 999px;
     }
 
     ul, ol {
       margin: 10px 0 14px;
-      padding-right: 22px;
+      padding-left: 22px;
     }
 
     li { margin: 5px 0; }
@@ -263,7 +263,7 @@
     }
 
     th, td {
-      text-align: right;
+      text-align: left;
       border: 1px solid var(--line);
       padding: 10px 12px;
       vertical-align: top;
@@ -377,341 +377,455 @@
 <body>
   <div class="page">
     <section class="hero">
-      <span class="badge">Simple Architecture Guide</span>
-      <h1>Real-Time Collaborative Document System Architecture</h1>
-      <p class="lead">This document is written in simple language so even a junior developer can understand how the system is built, what each part does, and how data moves between them.</p>
+      <span class="badge">Architecture Guide</span>
+      <h1>System Architecture Guide</h1>
+      <p class="lead">This document is written from the ground up in simple language so that a beginner developer can understand what parts this system is built from, what each part does, and where data flows.</p>
       <div class="box info">
         <span class="box-title">What is this document about?</span>
-        This page explains architecture, not every code detail. It answers what each service does and why the system was designed this way.
+        This file explains the architecture, not the fine-grained coding details. It mainly answers which service does what and why this path was chosen.
       </div>
       <div class="hero-meta">
         <div class="meta-card">
           <strong>6</strong>
-          <span>Main services in the architecture</span>
+          <span>Core services in the architecture</span>
         </div>
         <div class="meta-card">
           <strong>2</strong>
-          <span>Separate databases for auth and document</span>
+          <span>Separate databases for auth and documents</span>
         </div>
         <div class="meta-card">
           <strong>1</strong>
-          <span>The single source of truth for document state</span>
+          <span>Single source of truth for final document state</span>
         </div>
       </div>
       <div class="toc">
-        <h2>Contents</h2>
+        <h2>Table of Contents</h2>
         <ol>
-          <li><a href="#goal">Project goal</a></li>
-          <li><a href="#big-picture">Big picture</a></li>
-          <li><a href="#services">Services and responsibilities</a></li>
+          <li><a href="#goal">Project Goal</a></li>
+          <li><a href="#big-picture">System Overview</a></li>
+          <li><a href="#services">Services and Responsibilities</a></li>
           <li><a href="#databases">Databases</a></li>
-          <li><a href="#document-model">Document data model</a></li>
-          <li><a href="#auth-flow">Authentication flow</a></li>
-          <li><a href="#open-doc">Open document flow</a></li>
-          <li><a href="#edit-flow">Edit and sync flow</a></li>
-          <li><a href="#export-flow">Export flow</a></li>
-          <li><a href="#monitoring">Monitoring</a></li>
-          <li><a href="#limitations">Current limitations</a></li>
-          <li><a href="#summary">Final summary</a></li>
+          <li><a href="#document-model">Document Data Model</a></li>
+          <li><a href="#auth-flow">Authentication Flow</a></li>
+          <li><a href="#open-doc">Opening a Document Flow</a></li>
+          <li><a href="#edit-flow">Edit and Sync Flow</a></li>
+          <li><a href="#presence">Online Users (Presence)</a></li>
+          <li><a href="#remote-cursors">Remote Cursors</a></li>
+          <li><a href="#audit-flow">Audit Service and Kafka</a></li>
+          <li><a href="#export-flow">Export Flow</a></li>
+          <li><a href="#monitoring">Monitoring and Observability</a></li>
+          <li><a href="#limitations">Current Limitations</a></li>
+          <li><a href="#summary">Final Summary</a></li>
         </ol>
       </div>
     </section>
 
     <section class="section" id="goal">
-      <h2>1) Project goal</h2>
-      <p>This project is a simple system for editing a document in real time. That means multiple users can work on the same document and see updates.</p>
-      <p>This project is built more for learning than for shipping a production-ready product right now.</p>
-      <p>In simple words: this guide explains what each part does and how the pieces keep a shared document working.</p>
+      <h2>1) Project Goal</h2>
+      <p>This project is a simple system for real-time collaborative document editing. Multiple users can work on a single document and see each other's changes.</p>
+      <div class="box warn">
+        <span class="box-title">This project is built for learning only</span>
+        The goal of this project is not to produce a ready-to-deploy product. The goal is to deeply understand microservice architecture concepts, system design, AI, and modern software engineering. All design decisions were made with the purpose of learning and better understanding architectural patterns.
+      </div>
+      <h3>Topics you will learn in this project</h3>
+      <ul>
+        <li><strong>Microservices Architecture</strong>: How to split a large system into small, independent services, each with a clear responsibility.</li>
+        <li><strong>System Design</strong>: Learning design patterns for distributed systems, including CQRS, Event Sourcing, and Event-Driven Architecture.</li>
+        <li><strong>Real-time Collaboration</strong>: Understanding CRDT and OT patterns for multi-user concurrent document editing.</li>
+        <li><strong>WebSocket and Real-time Communication</strong>: Implementing bidirectional communication between client and server using WebSocket.</li>
+        <li><strong>Authentication &amp; Security</strong>: Implementing JWT, refresh tokens, and modern authentication models.</li>
+        <li><strong>Redis Pub/Sub Messaging</strong>: Using Redis for inter-service communication and state coordination in distributed systems.</li>
+        <li><strong>Event Streaming with Kafka</strong>: Using Kafka for asynchronous events and service decoupling.</li>
+        <li><strong>Observability and Monitoring</strong>: Using Prometheus, Grafana, and Jaeger for system monitoring.</li>
+        <li><strong>Testing</strong>: Writing unit, integration, and end-to-end tests for different services.</li>
+        <li><strong>DevOps and Docker</strong>: Containerizing services and orchestrating them with Docker Compose.</li>
+      </ul>
+      <p>In simple terms: here we will understand what each part does and how these parts together maintain a shared document.</p>
       <div class="box ok">
-        <span class="box-title">Educational goal</span>
-        Learn microservice architecture, WebSocket, Redis, JWT authentication, and storing documents in a separate service.
+        <span class="box-title">Educational Goal of the Project</span>
+        Learning microservice architecture, WebSocket, Redis, JWT authentication, document storage in a separate service, Kafka, monitoring, and professional testing.
       </div>
     </section>
 
     <section class="section" id="big-picture">
-      <h2>2) Big picture</h2>
-      <p>Put simply, this project is composed of a few small programs where each one has a clear job.</p>
-      <p>Here, the frontend is what the user sees in the browser, the gateway is the main entry point, the document service is the central notebook, and PostgreSQL is the storage drawer.</p>
+      <h2>2) System Overview</h2>
+      <p>To put it very simply, this project consists of several small programs, each performing a specific task.</p>
+      <p>Here, the Frontend is what the user sees in the browser, the Gateway is like the main gate, the Document Service is like a central notebook, and PostgreSQL is like a storage drawer.</p>
       <div class="flow">
         <span class="step">Frontend</span>
-        <span class="arrow">←→</span>
+        <span class="arrow">&harr;</span>
         <span class="step">Gateway</span>
-        <span class="arrow">←→</span>
+        <span class="arrow">&harr;</span>
         <span class="step">Document Service</span>
-        <span class="arrow">←→</span>
+        <span class="arrow">&harr;</span>
         <span class="step">PostgreSQL</span>
       </div>
       <div class="flow">
         <span class="step">Frontend</span>
-        <span class="arrow">←→</span>
+        <span class="arrow">&harr;</span>
         <span class="step">Auth Service</span>
-        <span class="arrow">←→</span>
+        <span class="arrow">&harr;</span>
         <span class="step">Auth PostgreSQL</span>
       </div>
       <div class="flow">
         <span class="step">Document Service</span>
-        <span class="arrow">→</span>
+        <span class="arrow">&rarr;</span>
         <span class="step">Redis</span>
-        <span class="arrow">→</span>
+        <span class="arrow">&rarr;</span>
         <span class="step">Gateway</span>
-        <span class="arrow">→</span>
+        <span class="arrow">&rarr;</span>
         <span class="step">Clients</span>
       </div>
-      <p>The important point is that the frontend does not talk directly to every service. Most requests go through the gateway.</p>
+      <p>So an important point is that the frontend does not communicate directly with all services. Most requests go through the Gateway.</p>
       <div class="box info">
-        <span class="box-title">Simple extra note</span>
-        The gateway is the middleman. If the frontend wants to read a document or verify a token, it asks the gateway, and the gateway sends the message to the correct service.
+        <span class="box-title">Further Simple Explanation</span>
+        The Gateway is the intermediary. If you want to view a document or verify a token, you tell the Gateway first, and then the Gateway forwards the message to the correct service.
       </div>
     </section>
 
     <section class="section" id="services">
-      <h2>3) Services and responsibilities</h2>
+      <h2>3) Services and Responsibilities</h2>
       <table>
         <thead>
           <tr>
             <th>Service</th>
             <th>Port</th>
-            <th>Main role</th>
+            <th>Main Job</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td>frontend</td>
             <td><code>3000</code></td>
-            <td>Show the UI, open documents, edit documents, and send user requests</td>
+            <td>Display UI, open documents, edit documents, send user requests</td>
           </tr>
           <tr>
             <td>gateway</td>
             <td><code>8080</code></td>
-            <td>Main entry point for the frontend, WebSocket handling, JWT checks, and proxying some APIs</td>
+            <td>Main entry point for the frontend, WebSocket, JWT verification, and proxying some APIs</td>
           </tr>
           <tr>
             <td>document-service</td>
             <td><code>8000</code></td>
-            <td>Create, read, update, and delete documents and folders. Also store <code>content</code> and <code>yjs_state</code></td>
+            <td>Create, read, update, and delete documents and folders. Also stores <code>content</code> and <code>yjs_state</code></td>
           </tr>
           <tr>
             <td>auth-service</td>
             <td><code>8002</code></td>
-            <td>Register, login, refresh token, and identify users</td>
+            <td>Registration, login, refresh tokens, and user identification</td>
           </tr>
           <tr>
             <td>export-service</td>
             <td><code>8001</code></td>
-            <td>Convert document content to <code>html</code>, <code>markdown</code>, and <code>txt</code></td>
+            <td>Convert documents to <code>html</code>, <code>markdown</code>, and <code>txt</code></td>
+          </tr>
+          <tr>
+            <td>audit-service</td>
+            <td><code>8003</code></td>
+            <td>Consume <code>document.events</code> from Kafka and store document activity history</td>
           </tr>
           <tr>
             <td>redis</td>
             <td><code>6379</code></td>
-            <td>Broadcast messages between services</td>
+            <td>Message broadcasting between services</td>
           </tr>
         </tbody>
       </table>
       <div class="box info">
-        <span class="box-title">Why are services separated?</span>
-        Because each service has a single responsibility. This makes the system easier to understand and keeps changes in one part from affecting the others.
-      </div>
-      <div class="box ok">
-        <span class="box-title">Simple example</span>
-        It is like having a kitchen, a cashier, and a guest room in separate spaces. Each one does its own job, and if something breaks, it is easier to find.
+        <span class="box-title">Why are the services separated?</span>
+        Because each service has a clear responsibility. This makes the system easier to understand and keeps changes to one part isolated from the others.
       </div>
     </section>
 
     <section class="section" id="databases">
       <h2>4) Databases</h2>
-      <p>In the current setup, the auth service and the document service use two separate databases.</p>
+      <p>In the current state, the authentication service and the document service use two separate databases.</p>
       <ul>
-        <li><strong>Document database</strong>: for documents, folders, and document versions</li>
-        <li><strong>Auth database</strong>: for auth-service users</li>
+        <li><strong>document database</strong>: For documents, folders, and document versions</li>
+        <li><strong>auth database</strong>: For users of the authentication service</li>
       </ul>
       <div class="box ok">
         <span class="box-title">Why is this separation important?</span>
-        Because user data and document data are different responsibilities. Keeping them separate makes the architecture cleaner and easier to maintain over time.
+        Because user data and document data are two different responsibilities. Keeping them separate makes the architecture cleaner and easier to maintain in the future.
       </div>
-      <p>In simple terms: a database is a box where data is stored. Each service has its own box so its data does not get mixed with the others.</p>
     </section>
 
     <section class="section" id="document-model">
-      <h2>5) Document data model</h2>
-      <p>Each document has a few important pieces:</p>
+      <h2>5) Document Data Model</h2>
+      <p>Each document has several important fields:</p>
       <ul>
-        <li><code>title</code>: the document title</li>
-        <li><code>content</code>: a simpler version of the content for display and fallback</li>
-        <li><code>yjs_state</code>: the collaborative document state for Yjs</li>
+        <li><code>title</code>: The document title</li>
+        <li><code>content</code>: A simpler version of the content for display and fallback</li>
+        <li><code>yjs_state</code>: The collaborative version of the document for Yjs</li>
       </ul>
-      <p>In simple learning terms: <code>title</code> is like the document name, <code>content</code> is like the plain text, and <code>yjs_state</code> is like a map that helps multiple people coordinate their edits together.</p>
+      <p>In simple terms: <code>title</code> is like the document name, <code>content</code> is like plain text, and <code>yjs_state</code> is like a map that helps multiple people coordinate changes in real-time.</p>
       <div class="box info">
         <span class="box-title">Why is Yjs/CRDT implemented?</span>
-        Because when several people edit the same document at the same time, there needs to be a way to combine everyone’s changes without breaking the text. Yjs uses CRDT so this coordination becomes simpler and more reliable.
-        <p>Put simply: Yjs takes updates and merges them so all users eventually see the same synchronized text.</p>
+        Because when multiple people work on a document simultaneously, there must be a way to combine everyone's changes without corrupting the content. Yjs uses CRDT to make this coordination simpler and more reliable.
+        <p>In very simple terms: Yjs takes updates and "merges" them so that all users eventually see a coordinated text.</p>
       </div>
       <div class="box info">
         <span class="box-title">Why do we have both content and yjs_state?</span>
-        Because <code>yjs_state</code> is needed for live collaboration, but for some simple displays or error cases, having <code>content</code> helps avoid showing an empty document.
+        Because <code>yjs_state</code> is needed for real-time collaboration, but for some simple displays or error conditions, having <code>content</code> helps prevent showing an empty document.
       </div>
-      <p>Every time a document is saved, a new version is also recorded in <code>DocumentVersion</code>.</p>
+      <p>Each time a document is saved, a new version is also recorded in <code>DocumentVersion</code>.</p>
     </section>
 
     <section class="section" id="auth-flow">
-      <h2>6) Authentication flow</h2>
-      <p>User login is done with JWT.</p>
-      <p>A JWT is like a digital pass that the frontend uses to prove the user is allowed to access something.</p>
+      <h2>6) Authentication Flow</h2>
+      <p>User login is handled with JWT.</p>
       <ol>
         <li>The user logs in or registers in the frontend.</li>
-        <li>The frontend sends a request to the <code>auth-service</code>.</li>
-        <li>If the credentials are valid, two tokens are returned: <code>access_token</code> and <code>refresh_token</code>.</li>
+        <li>The frontend sends a request to <code>auth-service</code>.</li>
+        <li>If the credentials are correct, two tokens are returned: <code>access_token</code> and <code>refresh_token</code>.</li>
         <li>The frontend uses the access token for API and WebSocket requests.</li>
       </ol>
-      <h3>What happens when access token expires?</h3>
+      <h3>What happens when the access token expires?</h3>
       <ol>
-        <li>If one of the requests gets a <code>401</code>, the frontend tries to get a new access token using the <code>refresh_token</code>.</li>
-        <li>If refresh succeeds, the page reloads and starts again with the new token.</li>
-        <li>If refresh fails, the user is sent to the login page.</li>
+        <li>If a request receives a <code>401</code>, the frontend attempts to get a new access token using the <code>refresh_token</code>.</li>
+        <li>If the refresh succeeds, the page reloads and comes back up with the new token.</li>
+        <li>If the refresh fails, the user is sent to the login page.</li>
       </ol>
       <div class="box warn">
         <span class="box-title">Simple note</span>
-        The <code>access_token</code> is for everyday actions. The <code>refresh_token</code> is only used to get a new access token.
+        The <code>access_token</code> is for everyday use. The <code>refresh_token</code> is only used to get a new access token.
       </div>
     </section>
 
     <section class="section" id="open-doc">
-      <h2>7) Open document flow</h2>
-      <p>When the user clicks a document or refreshes a document page, this path happens:</p>
+      <h2>7) Opening a Document Flow</h2>
+      <p>When a user clicks on a document or refreshes the page with a document URL, the following path is taken:</p>
       <ol>
-        <li>The frontend reads the document ID from the URL.</li>
-        <li>The frontend sends <code>GET /api/documents/:id</code> to the gateway.</li>
-        <li>The gateway forwards the request to the document service.</li>
-        <li>The document service reads the document data from the database.</li>
-        <li>The response returns to the frontend.</li>
-        <li>If the <code>yjs_state</code> is valid, it is applied in Yjs.</li>
+        <li>The frontend determines which document to open from the URL.</li>
+        <li>The frontend sends a <code>GET /api/documents/:id</code> request through the Gateway.</li>
+        <li>The Gateway forwards the request to the Document Service.</li>
+        <li>The Document Service reads the document data from the database.</li>
+        <li>The response is returned to the frontend.</li>
+        <li>If <code>yjs_state</code> is valid, it is applied to Yjs.</li>
         <li>If not, <code>content</code> is used as a fallback.</li>
       </ol>
-      <p>In other words, the frontend does not read directly from the database; it asks the gateway first, and then the gateway asks the document service.</p>
+      <p>This means the frontend does not fetch the document directly from the database; it first asks the Gateway, and then the Gateway tells the document service.</p>
     </section>
 
     <section class="section" id="edit-flow">
-      <h2>8) Edit and sync flow</h2>
+      <h2>8) Edit and Sync Flow</h2>
       <p>This is the most important part of the project architecture.</p>
       <div class="box warn">
-        <span class="box-title">Current system policy</span>
-        Clients only update after the changes have been saved in the document service database. This means there is no direct client-to-client broadcast sync.
+        <span class="box-title">Current System Policy</span>
+        Clients are only updated after changes have been saved in the document service database. This means there is no direct sync from client to other clients.
       </div>
-      <h3>Full change path</h3>
+      <h3>Full Change Path</h3>
       <ol>
         <li>The user types in the editor.</li>
-        <li>Yjs records the local change in the frontend.</li>
+        <li>Yjs in the frontend records the local change.</li>
         <li>The frontend triggers autosave.</li>
-        <li>The frontend sends <code>PATCH /api/documents/:id</code>.</li>
-        <li>The gateway forwards the request to the document service.</li>
-        <li>The document service saves the new content in PostgreSQL.</li>
-        <li>If <code>yjs_state</code> exists, the document service publishes a <code>sync-state</code> message to Redis.</li>
-        <li>The gateway, which subscribes to that channel, receives the message.</li>
-        <li>The gateway broadcasts the same message to clients connected to that document.</li>
+        <li>The frontend sends a <code>PATCH /api/documents/:id</code> request.</li>
+        <li>The Gateway forwards the request to the Document Service.</li>
+        <li>The Document Service saves the new content to PostgreSQL.</li>
+        <li>The Document Service also sends an event to Kafka so that independent services can do their work after this save.</li>
+        <li>If <code>yjs_state</code> exists, the Document Service publishes a <code>sync-state</code> message on Redis.</li>
+        <li>The Gateway, which is a subscriber to this channel, receives the message.</li>
+        <li>The Gateway broadcasts the same message to clients connected to that document.</li>
         <li>Other clients apply that state.</li>
       </ol>
       <div class="flow">
         <span class="step">Edit in Browser</span>
-        <span class="arrow">→</span>
+        <span class="arrow">&rarr;</span>
         <span class="step">PATCH /api/documents/:id</span>
-        <span class="arrow">→</span>
+        <span class="arrow">&rarr;</span>
         <span class="step">Document Service Save</span>
-        <span class="arrow">→</span>
+        <span class="arrow">&rarr;</span>
         <span class="step">Redis sync-state</span>
-        <span class="arrow">→</span>
+        <span class="arrow">&rarr;</span>
         <span class="step">Gateway Broadcast</span>
-        <span class="arrow">→</span>
+        <span class="arrow">&rarr;</span>
         <span class="step">Other Clients Apply</span>
       </div>
-      <h3>Why was this method chosen?</h3>
-      <p>Because this architecture is designed so that only data that is actually stored in the database is sent to the other clients. That means the source of truth is always the document service and its database.</p>
+      <h3>Why was this approach chosen?</h3>
+      <p>Because in this architecture, only data that has actually been saved in the database should reach other clients. This means the source of truth is always the Document Service and its database.</p>
       <div class="box info">
         <span class="box-title">Simple reminder</span>
-        This means that if two people type at the same time, the system makes sure the changes are saved in the main document before everyone sees them.
+        This means if two people type at the same time, before everyone sees it, the system ensures that the changes have been recorded in the main document.
+      </div>
+    </section>
+
+    <section class="section" id="presence">
+      <h2>9) Online Users (Presence)</h2>
+      <h3>Data Structure in Redis</h3>
+      <p>A <strong>Sorted Set</strong> named <code>doc:{docId}:online</code> is used. Each member is a user's email, and the score is the last activity time (Unix timestamp).</p>
+      <pre><code>Redis Key:   doc:42:online
+Members:     ["ali@example.com", "sara@example.com"]
+Scores:      [1693584000000, 1693584005000]</code></pre>
+      <h3>Full Path</h3>
+      <ol>
+        <li>The user opens a WebSocket. The Gateway extracts the email from the JWT.</li>
+        <li>When the client sends a <code>join</code> message, the Gateway adds the user's email to the Sorted Set with <code>ZADD</code>.</li>
+        <li>The Gateway reads the full list of online users from Redis.</li>
+        <li>The Gateway publishes a <code>presence-update</code> message containing the full list of users on the Redis channel <code>gateway:events</code>.</li>
+        <li>All Gateway instances receive this message and broadcast it to connected clients.</li>
+        <li>The frontend receives and displays the list of online users.</li>
+      </ol>
+      <div class="flow">
+        <span class="step">Client Join</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">Gateway ZADD Redis</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">Gateway Get Full List</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">Publish presence-update</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">All Gateways Broadcast</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">Frontend Displays</span>
+      </div>
+      <h3>Automatic Cleanup</h3>
+      <p>Each member has a TTL of 90 seconds. If a user disconnects (e.g., closes the browser), they are removed from the list after 90 seconds. Also, before reading the list, expired entries are cleaned up with <code>ZREMRANGEBYSCORE</code>.</p>
+      <h3>User Disconnect</h3>
+      <ol>
+        <li>When the WebSocket is closed, <code>readPump</code> detects it.</li>
+        <li>The Gateway removes the user's email from the Sorted Set with <code>ZREM</code>.</li>
+        <li>The updated list is published and broadcast to all clients.</li>
+      </ol>
+      <div class="box info">
+        <span class="box-title">Why a Sorted Set?</span>
+        <p>A Sorted Set allows us to quickly read the user list (<code>ZRANGE</code>), clean up old entries (<code>ZREMRANGEBYSCORE</code>), and have entries automatically expire if a Gateway crashes.</p>
+      </div>
+
+    </section>
+
+    <section class="section" id="remote-cursors">
+      <h2>10) Remote Cursors</h2>
+      <p>Each user can see other users' cursors live in the document. The cursor color is determined based on the user's email, and hovering over the cursor shows the user's email.</p>
+      <h3>Sending Cursor Position</h3>
+      <ol>
+        <li>Each time the user types or moves the cursor, the frontend sends a <code>cursor-update</code> message with the structure <code>{email, position}</code>.</li>
+        <li>The frontend throttles sending with a 30ms debounce to avoid sending excess messages.</li>
+        <li>The Gateway publishes the message on the Redis channel <code>gateway:events</code> so that all Gateway instances receive it.</li>
+      </ol>
+      <h3>Receiving and Displaying</h3>
+      <ol>
+        <li>The frontend receives the <code>cursor-update</code> message from the Gateway.</li>
+        <li>The active cursors list (<code>remoteCursors</code>) is updated.</li>
+        <li>A ProseMirror plugin called <code>RemoteCursorsExtension</code> receives this list and creates a <code>Decoration.widget</code> at the appropriate position for each user.</li>
+        <li>The cursor color is generated from a hash of the user's email so that each user has a consistent color.</li>
+      </ol>
+      <div class="box info">
+        <span class="box-title">Why rebuild on every transaction?</span>
+        <p>The TipTap editor uses Yjs for synchronization. When a user types, Yjs creates a transaction that completely replaces the document content. If we used <code>DecorationSet.map</code>, cursor positions would become incorrect and cursors would disappear. That is why on every transaction, cursors are rebuilt based on the new document position.</p>
+      </div>
+      <h3>Overall Flow</h3>
+      <div class="flow">
+        <span class="step">User Types</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">Send cursor-update (30ms debounce)</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">Gateway Publish Redis</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">All Gateways Broadcast</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">Frontend Updates Plugin State</span>
+        <span class="arrow">&rarr;</span>
+        <span class="step">Rebuild Decorations</span>
+      </div>
+    </section>
+
+    <section class="section" id="audit-flow">
+      <h2>11) Audit Service and Kafka</h2>
+      <p>After the Document Service saves changes to PostgreSQL, it publishes an independent event to Kafka.</p>
+      <p>This event is sent as a <code>document.updated</code> message and includes the document ID, user ID, version, timestamp, and client ID.</p>
+      <p>The Audit Service independently consumes this topic and records each event in the <code>audit_activity</code> table.</p>
+      <ul>
+        <li>Kafka topic: <code>document.events</code></li>
+        <li>Audit Service: <code>/api/documents/:id/activity</code></li>
+        <li>Activity storage via ORM with SQLAlchemy</li>
+      </ul>
+      <div class="box info">
+        <span class="box-title">Why Kafka?</span>
+        <p>Kafka allows downstream services to consume persistence events without a direct dependency on the Document Service.</p>
       </div>
     </section>
 
     <section class="section" id="export-flow">
-      <h2>9) Export flow</h2>
-      <p>The frontend also does not call the export-service directly for export. Like other APIs, it only calls the gateway.</p>
+      <h2>12) Export Flow</h2>
+      <p>For exports, the frontend does not go directly to the export-service. Like other APIs, it only calls the Gateway.</p>
       <ol>
         <li>The user clicks Export in the frontend.</li>
-        <li>The frontend sends <code>POST /api/export?format=...</code> to the gateway.</li>
-        <li>The gateway proxies the request to the export service.</li>
-        <li>The export service converts the content to the desired format.</li>
-        <li>The output file returns to the browser.</li>
+        <li>The frontend sends a <code>POST /api/export?format=...</code> request to the Gateway.</li>
+        <li>The Gateway proxies the request to the Export Service.</li>
+        <li>The Export Service converts the content to the desired format.</li>
+        <li>The output file is returned to the browser.</li>
       </ol>
-      <p>The export service only handles converting the text. The browser downloads the file and shows it to the user.</p>
+      <p>The Export Service only handles text conversion. The browser itself downloads the file and presents it to the user.</p>
       <div class="box ok">
-        <span class="box-title">Why this is useful</span>
-        The frontend only knows one main entry point: the gateway. This keeps the architecture cleaner and simpler.
+        <span class="box-title">Benefit of this approach</span>
+        The frontend only knows one main entry point: the Gateway. This makes the architecture cleaner and simpler.
       </div>
     </section>
 
     <section class="section" id="monitoring">
-      <h2>10) Monitoring and observability</h2>
-      <p>This section explains how to know if the system is healthy and where to look if something goes wrong.</p>
-      <h3>Main tools</h3>
+      <h2>13) Monitoring and Observability</h2>
+      <p>This section is for understanding whether the system is healthy, and if a problem occurs, where to look for the cause.</p>
+      <h3>Key Tools</h3>
       <ul>
-        <li><strong>Prometheus</strong>: collecting metrics</li>
-        <li><strong>Grafana</strong>: showing metrics on a dashboard</li>
-        <li><strong>Jaeger</strong>: viewing traces</li>
+        <li><strong>Prometheus</strong>: Collecting metrics</li>
+        <li><strong>Grafana</strong>: Displaying metrics on dashboards</li>
+        <li><strong>Jaeger</strong>: Viewing traces</li>
         <li><strong>redis-exporter</strong>: Redis metrics</li>
         <li><strong>postgres-exporter</strong>: PostgreSQL metrics</li>
-        <li><strong>node-exporter</strong>: host system metrics</li>
+        <li><strong>node-exporter</strong>: Host system metrics</li>
       </ul>
       <div class="box info">
-        <span class="box-title">What are Grafana and Prometheus?</span>
-        Prometheus is like an eye that collects numbers and status from services. Grafana is like a board that shows those numbers as charts and tables so we can quickly see what is wrong.
+        <span class="box-title">What do Grafana and Prometheus mean?</span>
+        Prometheus is like an eye that collects numbers and service statuses. Grafana is like a display board that shows these numbers as charts and tables so you can quickly see what is wrong.
       </div>
-      <h3>Key metrics</h3>
+      <h3>Important Metrics</h3>
       <ul>
-        <li>Number of WebSocket connections in the gateway</li>
-        <li>Number of messages received by the gateway</li>
+        <li>Number of WebSocket connections in Gateway</li>
+        <li>Number of messages received by Gateway</li>
         <li>Number of successful document saves</li>
         <li>Number of document save errors</li>
-        <li>Number of Redis publishes from the document service</li>
+        <li>Number of Redis publishes from the Document Service</li>
       </ul>
-      <h3>Simple monitoring flow</h3>
+      <h3>Simple Monitoring Flow</h3>
       <ol>
         <li>Services produce metrics.</li>
-        <li>Prometheus collects those metrics.</li>
+        <li>Prometheus collects these metrics.</li>
         <li>Grafana displays them.</li>
         <li>If tracing is enabled, traces go to Jaeger.</li>
       </ol>
       <div class="box info">
-        <span class="box-title">Very simple</span>
-        Metrics tell us where the issue is. Traces help us understand which exact path failed.
+        <span class="box-title">In very simple terms</span>
+        Metrics tell us where we have problems. Traces help us understand exactly in which path the problem occurred.
       </div>
     </section>
 
     <section class="section" id="limitations">
-      <h2>11) Current limitations</h2>
+      <h2>14) Current Limitations</h2>
       <ul>
-        <li>Because sync only happens after save, realtime feels a bit slower than direct broadcast.</li>
+        <li>Since sync only happens after save, real-time is slightly slower than direct broadcast.</li>
         <li>In some cases, fallback display depends on <code>content</code>.</li>
-        <li>This is an educational project, so some security and production-level settings are intentionally kept simple.</li>
+        <li>This is an educational project, so some security and production-level configurations are still kept simple.</li>
       </ul>
     </section>
 
     <section class="section" id="summary">
-      <h2>12) Final summary</h2>
-      <p>To describe the entire architecture in a few sentences:</p>
+      <h2>15) Final Summary</h2>
+      <p>If we want to describe the entire architecture in a few sentences:</p>
       <ul>
-        <li>The frontend shows the user interface.</li>
-        <li>The gateway is the main system entry point.</li>
-        <li>The document service is the source of truth for documents.</li>
-        <li>The auth service is the source of truth for users and tokens.</li>
-        <li>Redis is used for canonical message broadcasting.</li>
-        <li>Clients only update after changes are saved in the document database.</li>
+        <li>The frontend displays the user interface.</li>
+        <li>The Gateway is the main entry point of the system.</li>
+        <li>The Document Service is the source of truth for documents.</li>
+        <li>The Auth Service is the source of truth for users and tokens.</li>
+        <li>Redis is used as the canonical message broadcaster.</li>
+        <li>Clients are only updated after changes are saved in the document database.</li>
       </ul>
       <div class="box ok">
         <span class="box-title">One very important sentence</span>
-        In this architecture, the final document version is always determined by the document service, not the client.
+        In this architecture, the final version of the document is always determined by the Document Service, not by the client itself.
       </div>
     </section>
 
     <footer class="footer-note">
-      <p><strong>Last rule:</strong> If you see a difference between this document and the code, the code is correct and the document should be updated.</p>
     </footer>
   </div>
 </body>

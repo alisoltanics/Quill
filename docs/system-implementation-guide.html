@@ -409,6 +409,8 @@
           <li><a href="#auth-flow">فلو احراز هویت</a></li>
           <li><a href="#open-doc">فلو باز کردن سند</a></li>
           <li><a href="#edit-flow">فلو ویرایش و همگام سازی</a></li>
+          <li><a href="#presence">فلو کاربران آنلاین</a></li>
+          <li><a href="#remote-cursors">نشانگرهای از راه دور (Remote Cursors)</a></li>
           <li><a href="#audit-flow">سرویس Audit و Kafka</a></li>
           <li><a href="#export-flow">فلو اکسپورت</a></li>
           <li><a href="#monitoring">مانیتورینگ و مشاهده پذیری</a></li>
@@ -421,11 +423,27 @@
     <section class="section" id="goal">
       <h2>1) هدف پروژه</h2>
       <p>این پروژه یک سیستم ساده برای ویرایش سند به صورت همزمان است. یعنی چند کاربر می توانند روی یک سند کار کنند و تغییرات را ببینند.</p>
-      <p>این پروژه بیشتر برای یادگیری ساخته شده است، نه برای اینکه همین الان یک محصول کاملا production-ready باشد.</p>
+      <div class="box warn">
+        <span class="box-title">این پروژه فقط برای یادگیری ساخته شده است</span>
+        هدف این پروژه تولید یک محصول آماده بهره برداری نیست. هدف، یادگیری عمیق مفاهیم معماری میکروسرویس، طراحی سیستم، هوش مصنوعی، و مهندسی نرم‌افزار مدرن است. تمام تصمیمات طراحی با هدف یادگیری و درک بهتر الگوهای معماری انتخاب شده اند.
+      </div>
+      <h3>موضوعاتی که در این پروژه یاد می گیرید</h3>
+      <ul>
+        <li><strong>معماری میکروسرویس (Microservices Architecture)</strong>: چگونه یک سیستم بزرگ را به سرویس‌های کوچک و مستقل تقسیم کنیم و هر سرویس مسئولیت مشخصی داشته باشد.</li>
+        <li><strong>طراحی سیستم (System Design)</strong>: یادگیری الگوهای طراحی سیستم‌های توزیع‌شده، از جمله CQRS، Event Sourcing، و Event-Driven Architecture.</li>
+        <li><strong>همکاری همزمان (Real-time Collaboration)</strong>: درک الگوهای CRDT و OT برای ویرایش همزمان چند کاربر روی یک سند.</li>
+        <li><strong>WebSocket و ارتباطات بلادرنگ</strong>: پیاده‌سازی ارتباط دوطرفه بین کلاینت و سرور با استفاده از WebSocket.</li>
+        <li><strong>احراز هویت و امنیت (Auth & Security)</strong>: پیاده‌سازی JWT، refresh token، و مدل‌های احراز هویت مدرن.</li>
+        <li><strong>پیام‌رسانی با Redis Pub/Sub</strong>: استفاده از Redis برای ارتباط بین سرویس‌ها و هماهنگی state در سیستم‌های توزیع‌شده.</li>
+        <li><strong>Event Streaming با Kafka</strong>: استفاده از Kafka برای رویدادهای غیرهمزمان و جداسازی سرویس‌ها.</li>
+        <li><strong>مانیتورینگ و مشاهده‌پذیری (Observability)</strong>: استفاده از Prometheus، Grafana، و Jaeger برای نظارت بر سیستم.</li>
+        <li><strong>تست‌نویسی (Testing)</strong>: نوشتن تست‌های واحد، یکپارچه، و سراسری برای سرویس‌های مختلف.</li>
+        <li><strong>DevOps و Docker</strong>: Containerize کردن سرویس‌ها و ارکستراسیون با Docker Compose.</li>
+      </ul>
       <p>به زبان ساده: اینجا قرار است بفهمیم هر قسمت چه کاری می کند و چطور این بخش ها با هم یک سند مشترک را نگه می دارند.</p>
       <div class="box ok">
         <span class="box-title">هدف آموزشی پروژه</span>
-        یاد گرفتن معماری میکروسرویس، WebSocket، Redis، احراز هویت با JWT، و ذخیره سازی سند در یک سرویس جدا.
+        یاد گرفتن معماری میکروسرویس، WebSocket، Redis، احراز هویت با JWT، ذخیره سازی سند در یک سرویس جدا، Kafka، مانیتورینگ، و تست‌نویسی حرفه‌ای.
       </div>
     </section>
 
@@ -631,8 +649,88 @@
       </div>
     </section>
 
+    <section class="section" id="presence">
+      <h2>9) فلو کاربران آنلاین (Presence)</h2>
+      <h3>ساختار داده در Redis</h3>
+      <p>از یک <strong>Sorted Set</strong> به نام <code>doc:{docId}:online</code> استفاده می شود. هر عضو ایمیل کاربر است و score آن زمان آخرین فعالیت (Unix timestamp) است.</p>
+      <pre><code>Redis Key:   doc:42:online
+Members:     ["ali@example.com", "sara@example.com"]
+Scores:      [1693584000000, 1693584005000]</code></pre>
+      <h3>مسیر کامل</h3>
+      <ol>
+        <li>کاربر WebSocket باز می کند. Gateway ایمیل را از JWT استخراج می کند.</li>
+        <li>وقتی کلاینت پیام <code>join</code> می فرستد، Gateway با <code>ZADD</code> ایمیل کاربر را به Sorted Set اضافه می کند.</li>
+        <li>Gateway لیست کامل کاربران آنلاین را از Redis می خواند.</li>
+        <li>Gateway یک پیام <code>presence-update</code> شامل لیست کامل کاربران روی کانال <code>gateway:events</code> Redis publish می کند.</li>
+        <li>همه نمونه‌های Gateway این پیام را دریافت و به کلاینت‌های متصل broadcast می کنند.</li>
+        <li>فرانت لیست کاربران آنلاین را دریافت و نمایش می دهد.</li>
+      </ol>
+      <div class="flow">
+        <span class="step">Client Join</span>
+        <span class="arrow">→</span>
+        <span class="step">Gateway ZADD Redis</span>
+        <span class="arrow">→</span>
+        <span class="step">Gateway Get Full List</span>
+        <span class="arrow">→</span>
+        <span class="step">Publish presence-update</span>
+        <span class="arrow">→</span>
+        <span class="step">All Gateways Broadcast</span>
+        <span class="arrow">→</span>
+        <span class="step">Frontend Displays</span>
+      </div>
+      <h3>پاکسازی خودکار</h3>
+      <p>هر عضو TTL برابر ۹۰ ثانیه دارد. اگر کاربری قطع شود (مثلاً بستن مرورگر)، تا ۹۰ ثانیه بعد از لیست حذف می شود. همچنین قبل از خواندن لیست، entries منقضی شده با <code>ZREMRANGEBYSCORE</code> پاک می شوند.</p>
+      <h3>قطع ارتباط کاربر</h3>
+      <ol>
+        <li>وقتی WebSocket بسته شود، <code>readPump</code> متوجه می شود.</li>
+        <li>Gateway با <code>ZREM</code> ایمیل کاربر را از Sorted Set حذف می کند.</li>
+        <li>لیست به روز شده publish و به همه کلاینت ها broadcast می شود.</li>
+      </ol>
+      <div class="box info">
+        <span class="box-title">چرا Sorted Set؟</span>
+        <p>Sorted Set به ما امکان می دهد هم لیست کاربران را سریع بخوانیم (<code>ZRANGE</code>)، هم ورودی های قدیمی را پاک کنیم (<code>ZREMRANGEBYSCORE</code>)، و هم اگر Gateway کرش کرد، entries خودکار منقضی شوند.</p>
+      </div>
+
+    </section>
+
+    <section class="section" id="remote-cursors">
+      <h2>10) نشانگرهای از راه دور (Remote Cursors)</h2>
+      <p>هر کاربر می تواند نشانگر (cursor) کاربران دیگر را به صورت زنده در سند ببیند. رنگ نشانگر بر اساس ایمیل کاربر تعیین می شود و با hover روی نشانگر، ایمیل کاربر نمایش داده می شود.</p>
+      <h3>ارسال موقعیت نشانگر</h3>
+      <ol>
+        <li>فرانت هر بار که کاربر تایپ می کند یا جای مکان‌نما را تغییر می دهد، یک پیام <code>cursor-update</code> با ساختار <code>{email, position}</code> ارسال می کند.</li>
+        <li>فرانت ارسال را با debounce ۳۰ میلی‌ثانیه محدود می کند تا پیام های اضافی ارسال نشود.</li>
+        <li>Gateway پیام را روی کانال Redis <code>gateway:events</code> publish می کند تا همه نمونه‌های Gateway آن را دریافت کنند.</li>
+      </ol>
+      <h3>دریافت و نمایش</h3>
+      <ol>
+        <li>فرانت پیام <code>cursor-update</code> را از Gateway دریافت می کند.</li>
+        <li>لیست نشانگرهای فعال (<code>remoteCursors</code>) به روز می شود.</li>
+        <li>یک پلاگین ProseMirror به نام <code>RemoteCursorsExtension</code> این لیست را دریافت کرده و برای هر کاربر یک <code>Decoration.widget</code> در موقعیت مناسب ایجاد می کند.</li>
+        <li>رنگ نشانگر از روی هش ایمیل کاربر تولید می شود تا هر کاربر رنگ ثابتی داشته باشد.</li>
+      </ol>
+      <div class="box info">
+        <span class="box-title">چرا rebuild در هر تراکنش؟</span>
+        <p>ویرایشگر TipTap از Yjs برای همگام سازی استفاده می کند. وقتی کاربر تایپ می کند، Yjs تراکنشی ایجاد می کند که محتوای سند را کامل جایگزین می کند. اگر از <code>DecorationSet.map</code> استفاده کنیم، موقعیت های نشانگر نادرست شده و نشانگرها ناپدید می شوند. به همین دلیل در هر تراکنش، نشانگرها بر اساس موقعیت جدید سند بازسازی می شوند.</p>
+      </div>
+      <h3>فلو کلی</h3>
+      <div class="flow">
+        <span class="step">User Types</span>
+        <span class="arrow">→</span>
+        <span class="step">Send cursor-update (30ms debounce)</span>
+        <span class="arrow">→</span>
+        <span class="step">Gateway Publish Redis</span>
+        <span class="arrow">→</span>
+        <span class="step">All Gateways Broadcast</span>
+        <span class="arrow">→</span>
+        <span class="step">Frontend Updates Plugin State</span>
+        <span class="arrow">→</span>
+        <span class="step">Rebuild Decorations</span>
+      </div>
+    </section>
+
     <section class="section" id="audit-flow">
-      <h2>9) سرویس Audit و Kafka</h2>
+      <h2>11) سرویس Audit و Kafka</h2>
       <p>بعد از اینکه Document Service تغییرات را در PostgreSQL ذخیره می کند، یک event مستقل به Kafka منتشر می کند.</p>
       <p>این event به شکل یک پیام <code>document.updated</code> ارسال می شود و شامل شناسه سند، شناسه کاربر، نسخه، timestamp و شناسه کلاینت است.</p>
       <p>سرویس Audit به صورت مستقل این topic را مصرف می کند و هر رویداد ذخیره شده را در جدول <code>audit_activity</code> ثبت می کند.</p>
@@ -648,7 +746,7 @@
     </section>
 
     <section class="section" id="export-flow">
-      <h2>10) فلو اکسپورت</h2>
+      <h2>12) فلو اکسپورت</h2>
       <p>فرانت برای اکسپورت هم مستقیم سراغ export-service نمی رود. مثل بقیه APIها فقط Gateway را صدا می زند.</p>
       <ol>
         <li>کاربر در فرانت روی Export کلیک می کند.</li>
@@ -665,7 +763,7 @@
     </section>
 
     <section class="section" id="monitoring">
-      <h2>11) مانیتورینگ و مشاهده پذیری</h2>
+      <h2>13) مانیتورینگ و مشاهده پذیری</h2>
       <p>این بخش برای این است که بفهمیم سیستم سالم است یا نه، و اگر مشکلی پیش آمد، از کجا باید دنبال علت بگردیم.</p>
       <h3>ابزارهای اصلی</h3>
       <ul>
@@ -702,7 +800,7 @@
     </section>
 
     <section class="section" id="limitations">
-      <h2>11) محدودیت های فعلی</h2>
+      <h2>14) محدودیت های فعلی</h2>
       <ul>
         <li>چون sync فقط بعد از save انجام می شود، realtime کمی کندتر از حالت broadcast مستقیم است.</li>
         <li>در بعضی حالت ها نمایش fallback به <code>content</code> وابسته است.</li>
@@ -711,7 +809,7 @@
     </section>
 
     <section class="section" id="summary">
-      <h2>12) خلاصه نهایی</h2>
+      <h2>15) خلاصه نهایی</h2>
       <p>اگر بخواهیم کل معماری را در چند جمله بگوییم:</p>
       <ul>
         <li>فرانت رابط کاربری را نمایش می دهد.</li>

@@ -7,6 +7,9 @@ RUN go get github.com/go-redis/redis/v8@v8.11.5 github.com/gorilla/websocket@v1.
 RUN go mod tidy
 RUN go build -o /usr/local/bin/gateway ./
 
+FROM build AS test
+RUN go test -v -count=1 ./...
+
 FROM alpine:3.18
 RUN apk add --no-cache ca-certificates
 COPY --from=build /usr/local/bin/gateway /usr/local/bin/gateway

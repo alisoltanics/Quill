@@ -1,12 +1,19 @@
 import * as Y from 'yjs'
 
-export type YjsGatewayMessageType = 'join' | 'update' | 'sync-state'
+export type YjsGatewayMessageType = 'join' | 'update' | 'sync-state' | 'presence-update' | 'cursor-update'
+
+export interface CursorData {
+  email: string
+  position: number
+}
 
 export interface YjsGatewayMessage {
   type: YjsGatewayMessageType
   docId: number
   clientId: string
   update?: string
+  users?: string[]
+  cursor?: CursorData
 }
 
 export interface YjsGatewayOptions {
@@ -17,6 +24,8 @@ export interface YjsGatewayOptions {
   token?: string
   onStatus?: (connected: boolean) => void
   onLocalDocumentUpdate?: () => void
+  onPresenceUpdate?: (users: string[]) => void
+  onCursorUpdate?: (cursor: CursorData) => void
 }
 
 export function bytesToBase64(bytes: Uint8Array) {
@@ -60,7 +69,7 @@ function decodeMessage(raw: string) {
   }
 }
 
-export function createYjsGatewayConnection({ doc, docId, clientId, wsUrl, token, onStatus, onLocalDocumentUpdate }: YjsGatewayOptions) {
+export function createYjsGatewayConnection({ doc, docId, clientId, wsUrl, token, onStatus, onLocalDocumentUpdate, onPresenceUpdate, onCursorUpdate }: YjsGatewayOptions) {
   const socketUrl = token ? `${wsUrl}?token=${encodeURIComponent(token)}` : wsUrl
   const socket = new WebSocket(socketUrl)
   const connectionTag = Symbol('yjs-gateway-connection')
@@ -86,7 +95,21 @@ export function createYjsGatewayConnection({ doc, docId, clientId, wsUrl, token,
   socket.onmessage = (event) => {
     if (typeof event.data !== 'string') return
     const message = decodeMessage(event.data)
-    if (!message || message.docId !== docId || message.clientId === clientId) return
+    if (!message || message.docId !== docId) return
+
+    if (message.type === 'presence-update') {
+      onPresenceUpdate?.(message.users ?? [])
+      return
+    }
+
+    if (message.type === 'cursor-update') {
+      if (message.cursor && message.clientId !== clientId) {
+        onCursorUpdate?.(message.cursor)
+      }
+      return
+    }
+
+    if (message.clientId === clientId) return
     if (message.type === 'sync-state' && message.clientId !== 'document-service') return
     if (!message.update) return
 
@@ -109,6 +132,9 @@ export function createYjsGatewayConnection({ doc, docId, clientId, wsUrl, token,
       closed = true
       doc.off('update', onLocalUpdate)
       socket.close()
+    },
+    sendCursorUpdate(cursor: CursorData) {
+      send({ type: 'cursor-update', docId, clientId, cursor })
     },
   }
 }

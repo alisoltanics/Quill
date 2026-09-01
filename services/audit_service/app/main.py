@@ -21,6 +21,7 @@ logger = logging.getLogger("audit_service")
 KAFKA_BOOTSTRAP_SERVERS = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 KAFKA_TOPIC = os.environ.get("KAFKA_TOPIC", "document.events")
 KAFKA_CONSUMER_GROUP = os.environ.get("KAFKA_CONSUMER_GROUP", "audit-service")
+DEBUG_MODE = os.environ.get("DEBUG", os.environ.get("AUDIT_DEBUG", "false")).lower() in ("1", "true", "yes")
 
 app = FastAPI(title="Audit Service")
 
@@ -59,6 +60,14 @@ def process_event(event: dict) -> None:
     )
     client_id = event.get("client_id")
     event_timestamp = parse_timestamp(event.get("timestamp", datetime.utcnow().isoformat() + "Z"))
+
+    if DEBUG_MODE:
+        logger.info(
+            "Debug mode enabled, skipping audit DB persistence for document %s version %s",
+            document_id,
+            version,
+        )
+        return
 
     with SessionLocal() as db:
         audit = AuditActivity(

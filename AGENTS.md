@@ -1,144 +1,205 @@
-# Project Context — READ THIS FIRST
+# AGENTS.md
 
-## ⚠️ Purpose: Learning, not production
+## Project Purpose
 
-This project exists **only for practice and learning**. The goal is to deeply
-understand system design, microservices architecture, and Go — not to ship a
-polished product fast.
+This is a **learning project** — a real-time collaborative document system built
+to explore microservices architecture, system design, WebSocket patterns, and
+AI-assisted development. It is not production software.
 
-Because of this, always follow these rules in every suggestion, code review,
-## Project Context — READ THIS FIRST
+## Architecture Overview
 
-Purpose (learning, not production)
-
-This repository is a learning playground to explore real-time collaboration
-patterns and microservice design. Prioritize clarity and explicit patterns
-over shortcuts.
-
-Guidelines
-- Prefer explicit, textbook patterns (dependency injection, clear boundaries).
-- Explain the reasoning for design choices — not just the code.
-- When multiple architectures are possible, list options and why one was
-     chosen.
-- Use idiomatic Go for the gateway (goroutines, channels, interfaces).
-
-Project: Real-time Collaborative Document System
-
-Short description
-This is a simple Figma/Notion-like system split into services to practice
-real-time collaboration: WebSocket gateway, document service, ephemeral
-presence, and helper services.
-
-Architecture (overview)
-- WebSocket Gateway (Go): accepts many WebSocket clients and forwards events
-     via Redis pub/sub so multiple gateway instances stay in sync.
-- Document Service (Django + DRF): applies merge logic (OT/CRDT) and persists
-     documents in PostgreSQL.
-- Presence & Cursor: ephemeral state stored in Redis and broadcast by the
-     gateway.
-
-Tech stack
-- Go — WebSocket gateway
-- Django + DRF — document service and APIs
-- Redis — pub/sub + ephemeral presence
-- PostgreSQL — persistent document storage
-- Docker Compose — local dev orchestration
-
-Audience note
-The maintainer is experienced with Django/DRF and learning Go; explain Go
-idioms when suggesting changes.
-
-Milestones (short)
-- Scaffold repo, services, and docker-compose
-- Basic WebSocket gateway that accepts connections and echoes messages
-- Redis pub/sub across gateway instances
-- Django Document Service with a `Document` model and REST endpoints
-- Wire gateway → Redis → Document Service for persistence
-- Presence/cursor broadcast
-- Simple OT/CRDT merge logic for concurrent edits
-- Dockerize and verify locally with `docker-compose up`
-
-FastAPI service (design-only)
-
-Purpose: a lightweight, stateless helper service for async tasks like
-rendering previews, import/export, and receiving webhooks.
-
-Why FastAPI: async support, Pydantic validation, automatic OpenAPI docs,
-and good performance for I/O-bound tasks.
-
-Suggested endpoints
-- `GET /health` — health check
-- `POST /render` — produce a preview from document content (async)
-- `POST /webhook` — receive webhooks and publish messages to Redis
-- `GET /documents/{id}/preview` — return a document preview
-
-Integration patterns
-- Keep the service stateless; integrate via Redis (pub/sub) or HTTP to the
-     Document Service.
-- For long jobs, push tasks to a queue/Redis and process with background
-     workers.
-
-Suggested layout
-services/fastapi_service/
-     - app/main.py (FastAPI app)
-     - app/routers/
-     - app/schemas.py (Pydantic models)
-     - app/deps.py (dependencies, Redis client)
-     - Dockerfile
-     - requirements.txt
-
-Note: this section is documentation-only. Do not implement unless instructed.
-- Docker Compose: local environment for running services together
-
-### Audience / Maintainer notes
-- The maintainer has strong Django/DRF experience and is learning Go. When
-     suggesting Go changes, prefer explanations of Go idioms and tradeoffs.
-
-### Current milestones
-- [ ] Scaffold repo structure (services, docker-compose, README)
-- [ ] WebSocket Gateway (Go): accept connections and echo messages
-- [ ] Redis pub/sub between gateway instances
-- [ ] Document Service (Django): basic Document model and REST endpoints
-- [ ] Wire gateway → Redis → Document Service for persistence
-- [ ] Presence/cursor broadcast over WebSocket
-- [ ] Basic OT/CRDT for concurrent text edits
-- [ ] Dockerize everything and validate with `docker-compose up`
-- [ ] (stretch) Add OpenTelemetry tracing across services
-
-### FastAPI Service (Python / FastAPI)
-
-Purpose: a lightweight, stateless service for async I/O-bound tasks and
-quick endpoints (rendering/previews, import/export, webhooks, public
-endpoints).
-
-Why FastAPI:
-- Native async support, Pydantic models for validation, automatic OpenAPI
-     docs, and solid performance for I/O-bound workloads.
-
-Suggested endpoints:
-- `GET /health` — health check
-- `POST /render` — generate a preview from document content (async)
-- `POST /webhook` — receive webhooks and publish messages to Redis
-- `GET /documents/{id}/preview` — return a document preview
-
-Integration patterns:
-- Keep the service stateless. Integrate via Redis (pub/sub) or via HTTP calls
-     to the Document Service for persistence.
-- Publish long-running work to a queue/Redis and handle it in background
-     workers.
-
-Suggested layout:
 ```
-services/fastapi_service/
-     app/main.py         # FastAPI application
-     app/routers/*.py    # route modules
-     app/schemas.py      # Pydantic models
-     app/deps.py         # dependency wiring (Redis, clients)
-     Dockerfile
-     requirements.txt
+┌─────────┐    WebSocket    ┌──────────┐    Redis Pub/Sub    ┌──────────┐
+│ Frontend│◄───────────────►│ Gateway  │◄───────────────────►│ Gateway  │ (N instances)
+│ Next.js │                 │ Go       │                     │ Go       │
+└─────────┘                 └──────────┘                     └──────────┘
+                                   │
+                                   │ REST API
+                                   ▼
+                            ┌──────────────┐    Kafka     ┌──────────────┐
+                            │ Document     │─────────────►│ Audit        │
+                            │ Service      │              │ Service      │
+                            │ Django + DRF │              │ Django       │
+                            └──────────────┘              └──────────────┘
+                                   │
+                                   │ HTTP
+                            ┌──────────────┐              ┌──────────────┐
+                            │ Auth         │              │ Export       │
+                            │ Service      │              │ Service      │
+                            │ Django + DRF │              │ Django + DRF │
+                            └──────────────┘              └──────────────┘
 ```
 
-Example dependencies (suggested): `fastapi`, `uvicorn[standard]`, `httpx`,
-`aioredis`, `pydantic`.
+### Services
 
-Note: this section is design-only. Implement the service only if instructed.
+| Service | Stack | Port | Responsibility |
+|---------|-------|------|----------------|
+| `frontend` | Next.js, TipTap, Yjs | 3000 | Collaborative editor UI |
+| `gateway` | Go, gorilla/websocket | 8080 | WebSocket connections, JWT auth, Redis pub/sub |
+| `document-service` | Django, DRF, Yjs | 8000 | Document CRUD, CRDT merge, persistence |
+| `auth-service` | Django, DRF | 8002 | JWT auth (register, login, refresh) |
+| `audit-service` | Django, DRF | 8003 | Activity logging, Kafka consumer |
+| `export-service` | Django, DRF | 8001 | PDF/HTML/Markdown export |
+| `redis` | Redis 7 | 6379 | Pub/sub, presence, ephemeral state |
+| `postgres` | PostgreSQL 15 | 5432 | Document storage |
+| `audit-postgres` | PostgreSQL 15 | 5433 | Audit log storage |
+| `kafka` | Kafka | 9092 | Event streaming for audit events |
+
+## Tech Stack
+
+- **Frontend**: Next.js, React, TipTap (ProseMirror), Yjs CRDT, Tailwind CSS
+- **Gateway**: Go, gorilla/websocket, Redis pub/sub, JWT middleware
+- **Services**: Python 3.11, Django, DRF, async SQLAlchemy (auth), sync SQLAlchemy (audit/export)
+- **Data**: PostgreSQL 15, Redis 7, Kafka (KRaft mode)
+- **Infra**: Docker Compose, Prometheus, Grafana, Jaeger
+
+## Code Conventions
+
+### Go (Gateway)
+
+- Package-per-file: `main.go`, `hub.go`, `presence.go`, `config.go`
+- Tests in same package (`_test.go` files in `services/gateway/`)
+- Use `gorilla/websocket` for WebSocket, `go-redis` for Redis
+- Channels + goroutines for concurrency, not shared state
+- JWT secret read from env, no hardcoded secrets
+
+### Python (Services)
+
+- Each service has its own `Dockerfile` and `requirements.txt`
+- DRF serializers in `api/serializers.py`, views in `api/views.py`
+- Auth tests use `@patch` for `_JWT_SECRET` (module-level read)
+- Audit/export `process_event` tests must patch `SessionLocal`
+- pytest for Python tests, `pytest.ini` config per service
+- All test files live in `services/<name>/tests/` or `services/<name>/api/tests/`
+
+### Frontend
+
+- TipTap + Yjs for collaborative editing
+- `lib/yjsGateway.ts` — WebSocket ↔ Yjs sync
+- `lib/api.ts` — REST API client with JWT
+- `components/` — React components (Editor, ModeSwitch, SaveButton, etc.)
+- Jest tests in `services/frontend/tests/`
+- `jest.config.js` with `@edtr-io/ui` transform
+
+### Databases
+
+- Document Service → `postgres` (main DB)
+- Auth Service → `postgres-auth` (own DB)
+- Audit Service → `audit-postgres` (own DB)
+- Each service owns its DB. No cross-service DB access.
+
+## Testing
+
+### Running All Tests
+
+```bash
+./services/scripts/run_all_tests.sh
+```
+
+### Per-Service
+
+```bash
+# Gateway (Go) — via Docker
+docker compose build gateway && docker compose run --rm gateway go test -v ./...
+
+# Auth Service (pytest)
+docker compose build auth-service && docker compose run --rm auth-service pytest -v
+
+# Audit Service (pytest)
+docker compose build audit-service && docker compose run --rm audit-service pytest -v
+
+# Export Service (pytest)
+docker compose build export-service && docker compose run --rm export-service pytest -v
+
+# Document Service (Django test)
+docker compose build document-service && docker compose run --rm document-service python manage.py test api -v 2
+
+# Frontend (Jest)
+cd services/frontend && npx jest --forceExit --detectOpenHandles
+```
+
+### Test Counts (verified passing)
+
+| Service | Framework | Tests |
+|---------|-----------|-------|
+| Gateway (Go) | go test | 43 |
+| Auth Service | pytest | 19 |
+| Audit Service | pytest | 13 |
+| Export Service | pytest | 21 |
+| Document Service | Django | 66 |
+| Frontend | Jest | 15 |
+| **Total** | | **177** |
+
+## Common Pitfalls
+
+### Go Tests
+
+- `_JWT_SECRET` in Go is a `string`. Access it via exported `VerifyAccessToken`/`ExtractToken` functions.
+- `hub_test.go` must stay in `services/gateway/` (Go requires test files in same package).
+- `TestServerCORS` in `server_test.go` must use `t.Parallel()` or isolation issues.
+
+### Python Tests (Auth/Audit/Export)
+
+- `_JWT_SECRET` is read at module import time. `override_settings` won't work. Use `@patch(f"{MODULE}._JWT_SECRET", JWT_SECRET)`.
+- `process_event` uses its own `SessionLocal()`. Must `@patch("app.main.SessionLocal", TestingSessionLocal)`.
+- DRF `IsAuthenticated` returns **403** (not 401) when no auth is provided. Returns **401** only on invalid token (`AuthenticationFailed`).
+- DRF `CharField` has `trim_whitespace=True` by default. Use `trim_whitespace=False` on content fields.
+
+### Yjs / Remote Cursors
+
+- Yjs `Collaboration` extension replaces entire document content in transactions.
+- `DecorationSet.map` drops all decorations. Must rebuild from stored cursor data on every transaction.
+- Use `padding: 2px` wrapper (not CSS `:before` pseudo-element) for cursor decoration positioning.
+- Debounce cursor broadcasts (~30ms).
+
+### WebSocket / Redis Pub/Sub
+
+- Gateway instances sync via Redis pub/sub (`doc:{docId}:events`, `doc:{docId}:presence`).
+- Presence uses Redis sorted sets with 90s TTL (`doc:{docId}:online`).
+- `broadcastPresence` runs periodically via goroutine ticker (10s).
+
+## File Organization
+
+```
+├── AGENTS.md                          # This file
+├── docker-compose.yml                 # All services orchestration
+├── docs/
+│   ├── system-implementation-guide.html      # Farsi architecture guide
+│   ├── system-implementation-guide-en.html   # English architecture guide
+│   ├── system-implementation-guide.md        # English markdown guide
+│   ├── system-implementation-guide-fa.md     # Farsi markdown guide
+│   └── dev-setup-and-run.md
+├── services/
+│   ├── gateway/                       # Go WebSocket gateway
+│   │   ├── main.go, hub.go, presence.go, config.go, metrics.go, server.go, jwt.go
+│   │   ├── *_test.go                  # 43 Go tests
+│   │   └── Dockerfile (with test target)
+│   ├── frontend/                      # Next.js collaborative editor
+│   │   ├── components/, lib/, contexts/
+│   │   ├── tests/                     # Jest tests
+│   │   └── jest.config.js
+│   ├── document_service/              # Django document CRUD + CRDT
+│   │   ├── api/views.py, serializers.py, urls.py
+│   │   └── tests/test_api.py          # 66 Django tests
+│   ├── auth_service/                  # Django JWT auth
+│   │   ├── app/main.py
+│   │   └── tests/test_auth.py         # 19 pytest tests
+│   ├── audit_service/                 # Django activity logging
+│   │   ├── app/main.py
+│   │   └── tests/test_audit.py        # 13 pytest tests
+│   ├── export_service/                # Django PDF/HTML/MD export
+│   │   ├── app/main.py
+│   │   └── tests/test_export.py       # 21 pytest tests
+│   └── scripts/
+│       └── run_all_tests.sh           # Unified test runner
+```
+
+## How AI Agents Should Use This File
+
+1. **Read this first** before making any changes.
+2. **Check test counts** before and after modifications — all 177 tests must pass.
+3. **Follow conventions** above for the language/service you're editing.
+4. **Never commit secrets.** JWT secrets come from env vars.
+5. **Use existing patterns** — check neighboring files before introducing new ones.
+6. **Explain trade-offs** when suggesting architectural changes.
+7. **Run `./services/scripts/run_all_tests.sh`** before finishing any task.
