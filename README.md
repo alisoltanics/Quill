@@ -35,10 +35,10 @@
 |---------|-------|------|-------------|
 | `frontend` | Next.js, TipTap, Yjs | 3000 | Collaborative editor UI |
 | `gateway` | Go, gorilla/websocket | 8080 | WebSocket connections, JWT auth, Redis pub/sub |
-| `document-service` | Django, DRF, Yjs | 8000 | Document CRUD, CRDT merge, persistence |
-| `auth-service` | Django, DRF | 8002 | JWT auth (register, login, refresh) |
-| `audit-service` | Django, DRF | 8003 | Activity logging, Kafka consumer |
-| `export-service` | Django, DRF | 8001 | PDF/HTML/Markdown export |
+| `document-service` | Django, DRF | 8000 | Document CRUD, CRDT merge, persistence |
+| `auth-service` | FastAPI | 8002 | JWT auth (register, login, refresh) |
+| `audit-service` | FastAPI | 8003 | Activity logging, Kafka consumer |
+| `export-service` | FastAPI | 8001 | PDF/HTML/Markdown export |
 
 ## Run
 
