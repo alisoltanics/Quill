@@ -18,6 +18,12 @@ helper services) and to provide a clear implementation path.
   - Receives persistence requests, merges concurrent edits (OT/CRDT), and
     stores documents in PostgreSQL.
   - Publishes persistence events after successful saves.
+  - Emits `document.updated` events to Kafka so downstream consumers can
+    react independently.
+
+- Audit Service (FastAPI)
+  - Consumes `document.events` from Kafka.
+  - Persists document activity into PostgreSQL and exposes an audit API.
 
 - Redis
   - Central pub/sub bus for cross-instance events.

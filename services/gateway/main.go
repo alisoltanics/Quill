@@ -5,8 +5,6 @@ import (
     "flag"
     "log"
     "os"
-
-    "github.com/go-redis/redis/v8"
 )
 
 var addr = flag.String("addr", ":8080", "http service address")
@@ -48,6 +46,9 @@ func main() {
 
     if cfg.DocumentServiceURL != "" {
         log.Printf("document service enabled, url=%s", cfg.DocumentServiceURL)
+    }
+    if cfg.ExportServiceURL != "" {
+        log.Printf("export service enabled, url=%s", cfg.ExportServiceURL)
     }
 
     runServer(cfg, hub, rdb)

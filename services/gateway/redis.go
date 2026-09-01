@@ -33,7 +33,15 @@ func startRedisSubscriber(ctx context.Context, h *Hub, rdb *redis.Client) {
                 return
             case msg := <-ch:
                 if msg != nil {
-                    h.broadcast <- []byte(msg.Payload)
+                    if envelope, err := decodeGatewayEnvelope([]byte(msg.Payload)); err == nil {
+                        if envelope.Type != "sync-state" {
+                            continue
+                        }
+                        if envelope.ClientID != "document-service" {
+                            continue
+                        }
+                        h.broadcastToDoc(envelope.DocID, []byte(msg.Payload))
+                    }
                 }
             }
         }

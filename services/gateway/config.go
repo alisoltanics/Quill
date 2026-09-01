@@ -9,6 +9,7 @@ type appConfig struct {
     Addr                  string
     RedisAddr             string
     DocumentServiceURL    string
+    ExportServiceURL      string
     ObservabilityEnabled  bool
     OTELServiceName       string
     OTELExporterEndpoint  string
@@ -19,9 +20,15 @@ func loadConfig() appConfig {
         Addr:                 ":8080",
         RedisAddr:            os.Getenv("REDIS_ADDR"),
         DocumentServiceURL:   os.Getenv("DOCUMENT_SERVICE_URL"),
+        ExportServiceURL:     os.Getenv("EXPORT_SERVICE_URL"),
         ObservabilityEnabled: strings.EqualFold(os.Getenv("OBSERVABILITY_ENABLED"), "true"),
         OTELServiceName:      os.Getenv("OTEL_SERVICE_NAME"),
         OTELExporterEndpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    }
+
+    // Backward compatibility with older env name.
+    if cfg.ExportServiceURL == "" {
+        cfg.ExportServiceURL = os.Getenv("FASTAPI_SERVICE_URL")
     }
 
     if v := os.Getenv("ADDR"); v != "" {

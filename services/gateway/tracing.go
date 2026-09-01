@@ -42,7 +42,9 @@ func initTracer(cfg appConfig) (func(context.Context) error, error) {
     )
     if err != nil {
         log.Printf("failed to create tracing resource: %v", err)
-        res, _ = resource.Default()
+        if defaultRes := resource.Default(); defaultRes != nil {
+            res = defaultRes
+        }
     }
 
     tp := sdktrace.NewTracerProvider(

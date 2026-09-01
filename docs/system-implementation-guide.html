@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>مستند معماری ساده پروژه</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f3efe5;
+      --bg-accent: #dceafe;
+      --panel: rgba(255, 255, 255, 0.82);
+      --panel-strong: #fffdfa;
+      --text: #1d2430;
+      --muted: #5b6778;
+      --line: rgba(111, 126, 153, 0.18);
+      --accent: #0f4c81;
+      --accent-2: #c46b2d;
+      --accent-soft: rgba(220, 234, 254, 0.72);
+      --ok: #0f766e;
+      --ok-soft: rgba(227, 248, 242, 0.95);
+      --warn: #9a4d11;
+      --warn-soft: rgba(255, 244, 223, 0.96);
+      --shadow: 0 18px 50px rgba(31, 41, 55, 0.08);
+      --code-bg: #0f1b2e;
+      --code-text: #e8f0ff;
+      --radius: 20px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top right, rgba(196, 107, 45, 0.14), transparent 22%),
+        radial-gradient(circle at top left, rgba(15, 76, 129, 0.18), transparent 28%),
+        linear-gradient(180deg, var(--bg-accent) 0, var(--bg) 260px);
+      color: var(--text);
+      font-family: "Vazirmatn", Tahoma, "Noto Naskh Arabic", sans-serif;
+      line-height: 2.05;
+      font-size: 16.5px;
+    }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 18px 72px;
+    }
+
+    .hero,
+    .section,
+    .footer-note {
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 34px;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, rgba(15, 76, 129, 0.06), transparent 46%),
+        linear-gradient(315deg, rgba(196, 107, 45, 0.06), transparent 38%);
+      pointer-events: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent-soft), rgba(255,255,255,0.82));
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      border: 1px solid rgba(15, 76, 129, 0.12);
+      letter-spacing: 0.04em;
+    }
+
+    h1, h2, h3 {
+      margin: 0 0 10px;
+      line-height: 1.5;
+    }
+
+    h1 {
+      font-family: "Space Grotesk", "Vazirmatn", sans-serif;
+      font-size: clamp(2.1rem, 4vw, 3.4rem);
+      color: #102a56;
+      max-width: 12ch;
+      letter-spacing: -0.03em;
+    }
+
+    h2 {
+      font-size: 1.55rem;
+      color: #143b7a;
+    }
+
+    h3 {
+      font-size: 1.12rem;
+      color: #1f2937;
+      margin-top: 24px;
+    }
+
+    p { margin: 10px 0; }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 1.08rem;
+      max-width: 64ch;
+    }
+
+    .hero-meta {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .meta-card {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.68);
+      border: 1px solid rgba(15, 76, 129, 0.1);
+    }
+
+    .meta-card strong {
+      display: block;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 1.35rem;
+      color: #102a56;
+      margin-bottom: 2px;
+    }
+
+    .meta-card span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .toc {
+      margin-top: 22px;
+      padding: 18px 18px 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.86), rgba(246,250,255,0.86));
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+
+    .toc h2 {
+      font-size: 0.95rem;
+      margin-bottom: 10px;
+      color: #37547f;
+    }
+
+    .toc ol {
+      margin: 0;
+      padding-right: 20px;
+      columns: 2;
+      gap: 20px;
+    }
+
+    .toc li {
+      break-inside: avoid;
+      margin-bottom: 4px;
+    }
+
+    .toc a {
+      display: inline-flex;
+      padding: 4px 0;
+      color: #233756;
+      transition: color 0.15s ease, transform 0.15s ease;
+    }
+
+    .toc a:hover {
+      color: var(--accent-2);
+      transform: translateX(-2px);
+    }
+
+    .section {
+      padding: 26px 28px;
+      margin-bottom: 18px;
+      background: linear-gradient(180deg, var(--panel-strong), rgba(255,255,255,0.9));
+      position: relative;
+      overflow: hidden;
+    }
+
+    .section::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 120px;
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      border-bottom-left-radius: 999px;
+    }
+
+    ul, ol {
+      margin: 10px 0 14px;
+      padding-right: 22px;
+    }
+
+    li { margin: 5px 0; }
+
+    .box {
+      margin: 16px 0;
+      padding: 16px 18px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+    }
+
+    .box.info {
+      background: var(--accent-soft);
+      border-color: #cfe0ff;
+    }
+
+    .box.ok {
+      background: var(--ok-soft);
+      border-color: #bee7dd;
+    }
+
+    .box.warn {
+      background: var(--warn-soft);
+      border-color: #f1d6a6;
+    }
+
+    .box-title {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #17335e;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin: 14px 0;
+      overflow: hidden;
+      border-radius: 16px;
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.04);
+    }
+
+    th, td {
+      text-align: right;
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+
+    th {
+      background: linear-gradient(180deg, #f8fbff, #edf4ff);
+      color: #26457a;
+      font-size: 14px;
+    }
+
+    tbody tr:nth-child(even) td {
+      background: rgba(248, 251, 255, 0.55);
+    }
+
+    code {
+      background: #eef2f7;
+      border: 1px solid #d9e1eb;
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-family: "DejaVu Sans Mono", Consolas, monospace;
+      font-size: 0.92em;
+      direction: ltr;
+      unicode-bidi: embed;
+      display: inline-block;
+    }
+
+    pre {
+      direction: ltr;
+      text-align: left;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)),
+        var(--code-bg);
+      color: var(--code-text);
+      border-radius: 16px;
+      padding: 16px 18px;
+      overflow-x: auto;
+      border: 1px solid #1e293b;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    pre code {
+      background: transparent;
+      border: 0;
+      color: inherit;
+      padding: 0;
+      display: inline;
+    }
+
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      padding: 16px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(15, 76, 129, 0.06), rgba(255,255,255,0.75));
+      border: 1px solid rgba(15, 76, 129, 0.12);
+    }
+
+    .step {
+      background: linear-gradient(180deg, #ffffff, #f1f6ff);
+      border: 1px solid #d7e4fb;
+      color: #1e3a8a;
+      border-radius: 12px;
+      padding: 9px 14px;
+      font-weight: 700;
+      box-shadow: 0 8px 16px rgba(30, 58, 138, 0.06);
+    }
+
+    .arrow {
+      align-self: center;
+      color: #7d8798;
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+
+    .footer-note {
+      padding: 24px 26px;
+      background:
+        radial-gradient(circle at top left, rgba(255,255,255,0.06), transparent 26%),
+        linear-gradient(135deg, #0f1f36, #17345d);
+      color: #e5eefc;
+    }
+
+    .footer-note strong {
+      color: #ffffff;
+    }
+
+    @media (max-width: 900px) {
+      .hero-meta {
+        grid-template-columns: 1fr;
+      }
+
+      .toc ol {
+        columns: 1;
+      }
+
+      .page {
+        padding-inline: 12px;
+      }
+
+      .hero,
+      .section,
+      .footer-note {
+        padding-inline: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <span class="badge">سند معماری ساده</span>
+      <h1>مستند معماری پروژه همکاری همزمان روی سند</h1>
+      <p class="lead">این سند از اول و با زبان ساده نوشته شده تا یک برنامه نویس تازه کار هم بتواند بفهمد این سیستم از چه بخش هایی ساخته شده، هر بخش چه کاری می کند، و داده از کجا به کجا می رود.</p>
+      <div class="box info">
+        <span class="box-title">این سند درباره چیست؟</span>
+        این فایل قرار است معماری را توضیح دهد، نه جزئیات ریز کدنویسی را. یعنی بیشتر جواب می دهد که چه سرویسی چه کاری می کند و چرا این مسیر انتخاب شده است.
+      </div>
+      <div class="hero-meta">
+        <div class="meta-card">
+          <strong>6</strong>
+          <span>سرویس اصلی در معماری</span>
+        </div>
+        <div class="meta-card">
+          <strong>2</strong>
+          <span>پایگاه داده جدا برای auth و document</span>
+        </div>
+        <div class="meta-card">
+          <strong>1</strong>
+          <span>منبع حقیقت برای state نهایی سند</span>
+        </div>
+      </div>
+      <div class="toc">
+        <h2>فهرست</h2>
+        <ol>
+          <li><a href="#goal">هدف پروژه</a></li>
+          <li><a href="#big-picture">نمای کلی سیستم</a></li>
+          <li><a href="#services">سرویس ها و مسئولیت هرکدام</a></li>
+          <li><a href="#databases">پایگاه داده ها</a></li>
+          <li><a href="#document-model">مدل داده سند</a></li>
+          <li><a href="#auth-flow">فلو احراز هویت</a></li>
+          <li><a href="#open-doc">فلو باز کردن سند</a></li>
+          <li><a href="#edit-flow">فلو ویرایش و همگام سازی</a></li>
+          <li><a href="#audit-flow">سرویس Audit و Kafka</a></li>
+          <li><a href="#export-flow">فلو اکسپورت</a></li>
+          <li><a href="#monitoring">مانیتورینگ و مشاهده پذیری</a></li>
+          <li><a href="#limitations">محدودیت های فعلی</a></li>
+          <li><a href="#summary">خلاصه نهایی</a></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section" id="goal">
+      <h2>1) هدف پروژه</h2>
+      <p>این پروژه یک سیستم ساده برای ویرایش سند به صورت همزمان است. یعنی چند کاربر می توانند روی یک سند کار کنند و تغییرات را ببینند.</p>
+      <p>این پروژه بیشتر برای یادگیری ساخته شده است، نه برای اینکه همین الان یک محصول کاملا production-ready باشد.</p>
+      <p>به زبان ساده: اینجا قرار است بفهمیم هر قسمت چه کاری می کند و چطور این بخش ها با هم یک سند مشترک را نگه می دارند.</p>
+      <div class="box ok">
+        <span class="box-title">هدف آموزشی پروژه</span>
+        یاد گرفتن معماری میکروسرویس، WebSocket، Redis، احراز هویت با JWT، و ذخیره سازی سند در یک سرویس جدا.
+      </div>
+    </section>
+
+    <section class="section" id="big-picture">
+      <h2>2) نمای کلی سیستم</h2>
+      <p>اگر بخواهیم خیلی ساده بگوییم، این پروژه از چند برنامه کوچک تشکیل شده که هر کدام یک کار مشخص انجام می دهند.</p>
+      <p>در اینجا Frontend همان چیزی است که کاربر در مرورگر می بیند، Gateway مثل دروازه اصلی است، Document Service مثل دفترچه یادداشت مرکزی است و PostgreSQL مثل کشوی ذخیره سازی است.</p>
+      <div class="flow">
+        <span class="step">Frontend</span>
+        <span class="arrow">←→</span>
+        <span class="step">Gateway</span>
+        <span class="arrow">←→</span>
+        <span class="step">Document Service</span>
+        <span class="arrow">←→</span>
+        <span class="step">PostgreSQL</span>
+      </div>
+      <div class="flow">
+        <span class="step">Frontend</span>
+        <span class="arrow">←→</span>
+        <span class="step">Auth Service</span>
+        <span class="arrow">←→</span>
+        <span class="step">Auth PostgreSQL</span>
+      </div>
+      <div class="flow">
+        <span class="step">Document Service</span>
+        <span class="arrow">→</span>
+        <span class="step">Redis</span>
+        <span class="arrow">→</span>
+        <span class="step">Gateway</span>
+        <span class="arrow">→</span>
+        <span class="step">Clients</span>
+      </div>
+      <p>پس یک نکته مهم این است که فرانت مستقیم با همه سرویس ها حرف نمی زند. بیشتر درخواست ها از Gateway رد می شوند.</p>
+      <div class="box info">
+        <span class="box-title">بیشتر توضیح ساده</span>
+        Gateway همان میانجی است. اگر بخواهد سند را ببیند یا توکن را بررسی کند، اول به Gateway می گوید و بعد Gateway این پیام را به سرویس درست می رساند.
+      </div>
+    </section>
+
+    <section class="section" id="services">
+      <h2>3) سرویس ها و مسئولیت هرکدام</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>سرویس</th>
+            <th>پورت</th>
+            <th>کار اصلی</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>frontend</td>
+            <td><code>3000</code></td>
+            <td>نمایش رابط کاربری، باز کردن سند، ویرایش سند، ارسال درخواست های کاربر</td>
+          </tr>
+          <tr>
+            <td>gateway</td>
+            <td><code>8080</code></td>
+            <td>ورودی اصلی سیستم برای فرانت، WebSocket، بررسی JWT، و proxy کردن بعضی APIها</td>
+          </tr>
+          <tr>
+            <td>document-service</td>
+            <td><code>8000</code></td>
+            <td>ساخت، خواندن، ویرایش و حذف سند و فولدر. همچنین ذخیره <code>content</code> و <code>yjs_state</code></td>
+          </tr>
+          <tr>
+            <td>auth-service</td>
+            <td><code>8002</code></td>
+            <td>ثبت نام، ورود، refresh token و شناسایی کاربر</td>
+          </tr>
+          <tr>
+            <td>export-service</td>
+            <td><code>8001</code></td>
+            <td>تبدیل سند به <code>html</code>، <code>markdown</code> و <code>txt</code></td>
+          </tr>
+          <tr>
+            <td>audit-service</td>
+            <td><code>8003</code></td>
+            <td>مصرف <code>document.events</code> از Kafka و ذخیره سابقه فعالیت سند</td>
+          </tr>
+          <tr>
+            <td>redis</td>
+            <td><code>6379</code></td>
+            <td>پخش پیام بین سرویس ها</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="box info">
+        <span class="box-title">چرا سرویس ها جدا شده اند؟</span>
+        چون هر سرویس یک مسئولیت مشخص دارد. این کار فهم سیستم را ساده تر می کند و تغییر دادن یک بخش را از بقیه جدا نگه می دارد.
+      </div>
+    </section>
+
+    <section class="section" id="databases">
+      <h2>4) پایگاه داده ها</h2>
+      <p>در وضعیت فعلی، سرویس احراز هویت و سرویس سند از دو پایگاه داده جدا استفاده می کنند.</p>
+      <ul>
+        <li><strong>document database</strong>: برای سندها، فولدرها و نسخه های سند</li>
+        <li><strong>auth database</strong>: برای کاربران سرویس احراز هویت</li>
+      </ul>
+      <div class="box ok">
+        <span class="box-title">چرا این جداسازی مهم است؟</span>
+        چون داده کاربران و داده سندها دو مسئولیت مختلف هستند. جدا بودن آن ها معماری را تمیزتر می کند و در آینده نگهداری سیستم را راحت تر می کند.
+      </div>
+    </section>
+
+    <section class="section" id="document-model">
+      <h2>5) مدل داده سند</h2>
+      <p>هر سند چند بخش مهم دارد:</p>
+      <ul>
+        <li><code>title</code>: عنوان سند</li>
+        <li><code>content</code>: نسخه ساده تر محتوا برای نمایش و fallback</li>
+        <li><code>yjs_state</code>: نسخه collaborative سند برای Yjs</li>
+      </ul>
+      <p>یادگیری ساده: <code>title</code> مثل نام سند است، <code>content</code> مثل متن معمولی است، و <code>yjs_state</code> مثل نقشه ای است که کمک می کند چند نفر همزمان تغییرات را با هم هماهنگ کنند.</p>
+      <div class="box info">
+        <span class="box-title">چرا Yjs/CRDT پیاده شده؟</span>
+        چون وقتی چند نفر همزمان روی یک سند کار می کنند، باید راهی باشد که تغییرات همه را با هم ترکیب کند بدون اینکه نوشته ها خراب شود. Yjs از CRDT استفاده می کند تا این هماهنگی را ساده تر و قابل اعتمادتر کند.
+        <p>به زبان خیلی ساده: Yjs آپدیت ها را می گیرد و آن‌ها را با هم «مرج» می کند تا همه کاربران در نهایت یک متن هماهنگ ببینند.</p>
+      </div>
+      <div class="box info">
+        <span class="box-title">چرا هم content داریم هم yjs_state؟</span>
+        چون <code>yjs_state</code> برای همکاری همزمان لازم است، اما برای بعضی نمایش های ساده یا شرایط خطا، داشتن <code>content</code> کمک می کند که سند خالی نشان داده نشود.
+      </div>
+      <p>هر بار که سند ذخیره می شود، یک نسخه جدید هم در <code>DocumentVersion</code> ثبت می شود.</p>
+    </section>
+
+    <section class="section" id="auth-flow">
+      <h2>6) فلو احراز هویت</h2>
+      <p>ورود کاربر با JWT انجام می شود.</p>
+      <ol>
+        <li>کاربر در فرانت login یا register می کند.</li>
+        <li>فرانت به <code>auth-service</code> درخواست می فرستد.</li>
+        <li>اگر اطلاعات درست باشد، دو توکن برمی گردد: <code>access_token</code> و <code>refresh_token</code>.</li>
+        <li>فرانت access token را برای درخواست های API و WebSocket استفاده می کند.</li>
+      </ol>
+      <h3>وقتی access token منقضی شود چه می شود؟</h3>
+      <ol>
+        <li>اگر یکی از درخواست ها <code>401</code> بگیرد، فرانت تلاش می کند با <code>refresh_token</code> یک access token جدید بگیرد.</li>
+        <li>اگر refresh موفق باشد، صفحه reload می شود و دوباره با توکن جدید بالا می آید.</li>
+        <li>اگر refresh ناموفق باشد، کاربر به صفحه login فرستاده می شود.</li>
+      </ol>
+      <div class="box warn">
+        <span class="box-title">نکته ساده</span>
+        <code>access_token</code> برای کارهای روزمره است. <code>refresh_token</code> فقط برای گرفتن access token جدید استفاده می شود.
+      </div>
+    </section>
+
+    <section class="section" id="open-doc">
+      <h2>7) فلو باز کردن سند</h2>
+      <p>وقتی کاربر روی یک سند کلیک می کند یا صفحه را با آدرس یک سند refresh می کند، این مسیر طی می شود:</p>
+      <ol>
+        <li>فرانت از URL می فهمد کدام سند باید باز شود.</li>
+        <li>فرانت از طریق Gateway درخواست <code>GET /api/documents/:id</code> می زند.</li>
+        <li>Gateway درخواست را به Document Service می رساند.</li>
+        <li>Document Service داده سند را از دیتابیس می خواند.</li>
+        <li>پاسخ به فرانت برمی گردد.</li>
+        <li>اگر <code>yjs_state</code> سالم باشد، روی Yjs اعمال می شود.</li>
+        <li>اگر نباشد، <code>content</code> به عنوان fallback استفاده می شود.</li>
+      </ol>
+      <p>یعنی فرانت سند را مستقیم از دیتابیس نمی گیرد؛ اول Gateway می پرسد و بعد Gateway به سرویس سند می گوید.</p>
+    </section>
+
+    <section class="section" id="edit-flow">
+      <h2>8) فلو ویرایش و همگام سازی</h2>
+      <p>این مهم ترین بخش معماری پروژه است.</p>
+      <div class="box warn">
+        <span class="box-title">سیاست فعلی سیستم</span>
+        کلاینت ها فقط بعد از این آپدیت می شوند که تغییرات در دیتابیس سرویس سند ذخیره شده باشد. یعنی sync مستقیم از کلاینت به بقیه کلاینت ها وجود ندارد.
+      </div>
+      <h3>مسیر کامل تغییرات</h3>
+      <ol>
+        <li>کاربر در ادیتور تایپ می کند.</li>
+        <li>Yjs در فرانت تغییر local را ثبت می کند.</li>
+        <li>فرانت autosave را trigger می کند.</li>
+        <li>فرانت به <code>PATCH /api/documents/:id</code> درخواست می زند.</li>
+        <li>Gateway درخواست را به Document Service می فرستد.</li>
+        <li>Document Service محتوای جدید را در PostgreSQL ذخیره می کند.</li>
+        <li>Document Service همچنین یک event به Kafka می فرستد تا سرویس های مستقل بعد از این save، کار خود را انجام دهند.</li>
+        <li>اگر <code>yjs_state</code> موجود باشد، Document Service یک پیام <code>sync-state</code> روی Redis publish می کند.</li>
+        <li>Gateway که subscriber این کانال است، پیام را می گیرد.</li>
+        <li>Gateway همان پیام را به کلاینت های وصل شده به آن سند broadcast می کند.</li>
+        <li>کلاینت های دیگر آن state را apply می کنند.</li>
+      </ol>
+      <div class="flow">
+        <span class="step">Edit in Browser</span>
+        <span class="arrow">→</span>
+        <span class="step">PATCH /api/documents/:id</span>
+        <span class="arrow">→</span>
+        <span class="step">Document Service Save</span>
+        <span class="arrow">→</span>
+        <span class="step">Redis sync-state</span>
+        <span class="arrow">→</span>
+        <span class="step">Gateway Broadcast</span>
+        <span class="arrow">→</span>
+        <span class="step">Other Clients Apply</span>
+      </div>
+      <h3>چرا این روش انتخاب شده؟</h3>
+      <p>چون در این معماری قرار است فقط داده ای به بقیه کلاینت ها برسد که واقعاً در دیتابیس ذخیره شده است. این یعنی منبع حقیقت همیشه Document Service و دیتابیس آن است.</p>
+      <div class="box info">
+        <span class="box-title">یادآوری ساده</span>
+        این یعنی اگر دو نفر همزمان تایپ کنند، قبل از اینکه همه ببینند، سیستم مطمئن می شود که تغییرات در سند اصلی ثبت شده باشد.
+      </div>
+    </section>
+
+    <section class="section" id="audit-flow">
+      <h2>9) سرویس Audit و Kafka</h2>
+      <p>بعد از اینکه Document Service تغییرات را در PostgreSQL ذخیره می کند، یک event مستقل به Kafka منتشر می کند.</p>
+      <p>این event به شکل یک پیام <code>document.updated</code> ارسال می شود و شامل شناسه سند، شناسه کاربر، نسخه، timestamp و شناسه کلاینت است.</p>
+      <p>سرویس Audit به صورت مستقل این topic را مصرف می کند و هر رویداد ذخیره شده را در جدول <code>audit_activity</code> ثبت می کند.</p>
+      <ul>
+        <li>Kafka topic: <code>document.events</code></li>
+        <li>سرویس Audit: <code>/api/documents/:id/activity</code></li>
+        <li>ذخیره activity به شکل ORM با SQLAlchemy</li>
+      </ul>
+      <div class="box info">
+        <span class="box-title">چرا Kafka؟</span>
+        <p>Kafka به سرویس های downstream اجازه می دهد بدون وابستگی مستقیم به Document Service، رویدادهای persistence را مصرف کنند.</p>
+      </div>
+    </section>
+
+    <section class="section" id="export-flow">
+      <h2>10) فلو اکسپورت</h2>
+      <p>فرانت برای اکسپورت هم مستقیم سراغ export-service نمی رود. مثل بقیه APIها فقط Gateway را صدا می زند.</p>
+      <ol>
+        <li>کاربر در فرانت روی Export کلیک می کند.</li>
+        <li>فرانت به <code>POST /api/export?format=...</code> روی Gateway درخواست می زند.</li>
+        <li>Gateway درخواست را به Export Service proxy می کند.</li>
+        <li>Export Service محتوا را به فرمت دلخواه تبدیل می کند.</li>
+        <li>فایل خروجی به مرورگر برمی گردد.</li>
+      </ol>
+      <p>Export Service فقط نقش تبدیل متن را دارد. خود مرورگر این فایل را دانلود می کند و آن را در سیستم کاربر نشان می دهد.</p>
+      <div class="box ok">
+        <span class="box-title">مزیت این کار</span>
+        فرانت فقط یک درگاه اصلی می شناسد: Gateway. این کار معماری را تمیزتر و ساده تر می کند.
+      </div>
+    </section>
+
+    <section class="section" id="monitoring">
+      <h2>11) مانیتورینگ و مشاهده پذیری</h2>
+      <p>این بخش برای این است که بفهمیم سیستم سالم است یا نه، و اگر مشکلی پیش آمد، از کجا باید دنبال علت بگردیم.</p>
+      <h3>ابزارهای اصلی</h3>
+      <ul>
+        <li><strong>Prometheus</strong>: جمع کردن متریک ها</li>
+        <li><strong>Grafana</strong>: نمایش متریک ها روی داشبورد</li>
+        <li><strong>Jaeger</strong>: دیدن traceها</li>
+        <li><strong>redis-exporter</strong>: متریک های Redis</li>
+        <li><strong>postgres-exporter</strong>: متریک های PostgreSQL</li>
+        <li><strong>node-exporter</strong>: متریک های سیستم میزبان</li>
+      </ul>
+      <div class="box info">
+        <span class="box-title">Grafana و Prometheus یعنی چی؟</span>
+        Prometheus مثل یک چشم است که اعداد و وضعیت سرویس ها را جمع می کند. Grafana مثل یک تابلو است که این اعداد را به صورت نمودار و جدول نشان می دهد تا سریع ببینیم چه چیزی درست نیست.
+      </div>
+      <h3>متریک های مهم</h3>
+      <ul>
+        <li>تعداد اتصال های WebSocket در Gateway</li>
+        <li>تعداد پیام های دریافتی Gateway</li>
+        <li>تعداد ذخیره های موفق سند</li>
+        <li>تعداد خطاهای ذخیره سند</li>
+        <li>تعداد publishهای Redis از سمت Document Service</li>
+      </ul>
+      <h3>فلو ساده مانیتورینگ</h3>
+      <ol>
+        <li>سرویس ها متریک تولید می کنند.</li>
+        <li>Prometheus این متریک ها را جمع می کند.</li>
+        <li>Grafana آن ها را نمایش می دهد.</li>
+        <li>اگر tracing فعال باشد، traceها به Jaeger می روند.</li>
+      </ol>
+      <div class="box info">
+        <span class="box-title">خیلی ساده</span>
+        متریک ها می گویند کجا مشکل داریم. traceها بیشتر کمک می کنند بفهمیم مشکل دقیقاً در کدام مسیر اتفاق افتاد.
+      </div>
+    </section>
+
+    <section class="section" id="limitations">
+      <h2>11) محدودیت های فعلی</h2>
+      <ul>
+        <li>چون sync فقط بعد از save انجام می شود، realtime کمی کندتر از حالت broadcast مستقیم است.</li>
+        <li>در بعضی حالت ها نمایش fallback به <code>content</code> وابسته است.</li>
+        <li>این پروژه آموزشی است، پس بعضی تنظیمات امنیتی و production-level هنوز ساده نگه داشته شده اند.</li>
+      </ul>
+    </section>
+
+    <section class="section" id="summary">
+      <h2>12) خلاصه نهایی</h2>
+      <p>اگر بخواهیم کل معماری را در چند جمله بگوییم:</p>
+      <ul>
+        <li>فرانت رابط کاربری را نمایش می دهد.</li>
+        <li>Gateway درگاه اصلی سیستم است.</li>
+        <li>Document Service منبع حقیقت برای سندها است.</li>
+        <li>Auth Service منبع حقیقت برای کاربران و توکن ها است.</li>
+        <li>Redis برای پخش پیام canonical استفاده می شود.</li>
+        <li>کلاینت ها فقط بعد از ذخیره شدن تغییرات در دیتابیس سند، آپدیت می شوند.</li>
+      </ul>
+      <div class="box ok">
+        <span class="box-title">یک جمله خیلی مهم</span>
+        در این معماری، نسخه نهایی سند را همیشه Document Service تعیین می کند، نه خود کلاینت.
+      </div>
+    </section>
+
+    <footer class="footer-note">
+    </footer>
+  </div>
+</body>
+</html>
+
+       

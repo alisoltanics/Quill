@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simple Project Architecture Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f3efe5;
+      --bg-accent: #dceafe;
+      --panel: rgba(255, 255, 255, 0.82);
+      --panel-strong: #fffdfa;
+      --text: #1d2430;
+      --muted: #5b6778;
+      --line: rgba(111, 126, 153, 0.18);
+      --accent: #0f4c81;
+      --accent-2: #c46b2d;
+      --accent-soft: rgba(220, 234, 254, 0.72);
+      --ok: #0f766e;
+      --ok-soft: rgba(227, 248, 242, 0.95);
+      --warn: #9a4d11;
+      --warn-soft: rgba(255, 244, 223, 0.96);
+      --shadow: 0 18px 50px rgba(31, 41, 55, 0.08);
+      --code-bg: #0f1b2e;
+      --code-text: #e8f0ff;
+      --radius: 20px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top right, rgba(196, 107, 45, 0.14), transparent 22%),
+        radial-gradient(circle at top left, rgba(15, 76, 129, 0.18), transparent 28%),
+        linear-gradient(180deg, var(--bg-accent) 0, var(--bg) 260px);
+      color: var(--text);
+      font-family: "Vazirmatn", Tahoma, "Noto Naskh Arabic", sans-serif;
+      line-height: 2.05;
+      font-size: 16.5px;
+    }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 18px 72px;
+    }
+
+    .hero,
+    .section,
+    .footer-note {
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 34px;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, rgba(15, 76, 129, 0.06), transparent 46%),
+        linear-gradient(315deg, rgba(196, 107, 45, 0.06), transparent 38%);
+      pointer-events: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent-soft), rgba(255,255,255,0.82));
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      border: 1px solid rgba(15, 76, 129, 0.12);
+      letter-spacing: 0.04em;
+    }
+
+    h1, h2, h3 {
+      margin: 0 0 10px;
+      line-height: 1.5;
+    }
+
+    h1 {
+      font-family: "Space Grotesk", "Vazirmatn", sans-serif;
+      font-size: clamp(2.1rem, 4vw, 3.4rem);
+      color: #102a56;
+      max-width: 12ch;
+      letter-spacing: -0.03em;
+    }
+
+    h2 {
+      font-size: 1.55rem;
+      color: #143b7a;
+    }
+
+    h3 {
+      font-size: 1.12rem;
+      color: #1f2937;
+      margin-top: 24px;
+    }
+
+    p { margin: 10px 0; }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 1.08rem;
+      max-width: 64ch;
+    }
+
+    .hero-meta {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .meta-card {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.68);
+      border: 1px solid rgba(15, 76, 129, 0.1);
+    }
+
+    .meta-card strong {
+      display: block;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 1.35rem;
+      color: #102a56;
+      margin-bottom: 2px;
+    }
+
+    .meta-card span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .toc {
+      margin-top: 22px;
+      padding: 18px 18px 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.86), rgba(246,250,255,0.86));
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+
+    .toc h2 {
+      font-size: 0.95rem;
+      margin-bottom: 10px;
+      color: #37547f;
+    }
+
+    .toc ol {
+      margin: 0;
+      padding-right: 20px;
+      columns: 2;
+      gap: 20px;
+    }
+
+    .toc li {
+      break-inside: avoid;
+      margin-bottom: 4px;
+    }
+
+    .toc a {
+      display: inline-flex;
+      padding: 4px 0;
+      color: #233756;
+      transition: color 0.15s ease, transform 0.15s ease;
+    }
+
+    .toc a:hover {
+      color: var(--accent-2);
+      transform: translateX(-2px);
+    }
+
+    .section {
+      padding: 26px 28px;
+      margin-bottom: 18px;
+      background: linear-gradient(180deg, var(--panel-strong), rgba(255,255,255,0.9));
+      position: relative;
+      overflow: hidden;
+    }
+
+    .section::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 120px;
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      border-bottom-left-radius: 999px;
+    }
+
+    ul, ol {
+      margin: 10px 0 14px;
+      padding-right: 22px;
+    }
+
+    li { margin: 5px 0; }
+
+    .box {
+      margin: 16px 0;
+      padding: 16px 18px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+    }
+
+    .box.info {
+      background: var(--accent-soft);
+      border-color: #cfe0ff;
+    }
+
+    .box.ok {
+      background: var(--ok-soft);
+      border-color: #bee7dd;
+    }
+
+    .box.warn {
+      background: var(--warn-soft);
+      border-color: #f1d6a6;
+    }
+
+    .box-title {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #17335e;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin: 14px 0;
+      overflow: hidden;
+      border-radius: 16px;
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.04);
+    }
+
+    th, td {
+      text-align: right;
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+
+    th {
+      background: linear-gradient(180deg, #f8fbff, #edf4ff);
+      color: #26457a;
+      font-size: 14px;
+    }
+
+    tbody tr:nth-child(even) td {
+      background: rgba(248, 251, 255, 0.55);
+    }
+
+    code {
+      background: #eef2f7;
+      border: 1px solid #d9e1eb;
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-family: "DejaVu Sans Mono", Consolas, monospace;
+      font-size: 0.92em;
+      direction: ltr;
+      unicode-bidi: embed;
+      display: inline-block;
+    }
+
+    pre {
+      direction: ltr;
+      text-align: left;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)),
+        var(--code-bg);
+      color: var(--code-text);
+      border-radius: 16px;
+      padding: 16px 18px;
+      overflow-x: auto;
+      border: 1px solid #1e293b;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    pre code {
+      background: transparent;
+      border: 0;
+      color: inherit;
+      padding: 0;
+      display: inline;
+    }
+
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      padding: 16px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(15, 76, 129, 0.06), rgba(255,255,255,0.75));
+      border: 1px solid rgba(15, 76, 129, 0.12);
+    }
+
+    .step {
+      background: linear-gradient(180deg, #ffffff, #f1f6ff);
+      border: 1px solid #d7e4fb;
+      color: #1e3a8a;
+      border-radius: 12px;
+      padding: 9px 14px;
+      font-weight: 700;
+      box-shadow: 0 8px 16px rgba(30, 58, 138, 0.06);
+    }
+
+    .arrow {
+      align-self: center;
+      color: #7d8798;
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+
+    .footer-note {
+      padding: 24px 26px;
+      background:
+        radial-gradient(circle at top left, rgba(255,255,255,0.06), transparent 26%),
+        linear-gradient(135deg, #0f1f36, #17345d);
+      color: #e5eefc;
+    }
+
+    .footer-note strong {
+      color: #ffffff;
+    }
+
+    @media (max-width: 900px) {
+      .hero-meta {
+        grid-template-columns: 1fr;
+      }
+
+      .toc ol {
+        columns: 1;
+      }
+
+      .page {
+        padding-inline: 12px;
+      }
+
+      .hero,
+      .section,
+      .footer-note {
+        padding-inline: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <span class="badge">Simple Architecture Guide</span>
+      <h1>Real-Time Collaborative Document System Architecture</h1>
+      <p class="lead">This document is written in simple language so even a junior developer can understand how the system is built, what each part does, and how data moves between them.</p>
+      <div class="box info">
+        <span class="box-title">What is this document about?</span>
+        This page explains architecture, not every code detail. It answers what each service does and why the system was designed this way.
+      </div>
+      <div class="hero-meta">
+        <div class="meta-card">
+          <strong>6</strong>
+          <span>Main services in the architecture</span>
+        </div>
+        <div class="meta-card">
+          <strong>2</strong>
+          <span>Separate databases for auth and document</span>
+        </div>
+        <div class="meta-card">
+          <strong>1</strong>
+          <span>The single source of truth for document state</span>
+        </div>
+      </div>
+      <div class="toc">
+        <h2>Contents</h2>
+        <ol>
+          <li><a href="#goal">Project goal</a></li>
+          <li><a href="#big-picture">Big picture</a></li>
+          <li><a href="#services">Services and responsibilities</a></li>
+          <li><a href="#databases">Databases</a></li>
+          <li><a href="#document-model">Document data model</a></li>
+          <li><a href="#auth-flow">Authentication flow</a></li>
+          <li><a href="#open-doc">Open document flow</a></li>
+          <li><a href="#edit-flow">Edit and sync flow</a></li>
+          <li><a href="#export-flow">Export flow</a></li>
+          <li><a href="#monitoring">Monitoring</a></li>
+          <li><a href="#limitations">Current limitations</a></li>
+          <li><a href="#summary">Final summary</a></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section" id="goal">
+      <h2>1) Project goal</h2>
+      <p>This project is a simple system for editing a document in real time. That means multiple users can work on the same document and see updates.</p>
+      <p>This project is built more for learning than for shipping a production-ready product right now.</p>
+      <p>In simple words: this guide explains what each part does and how the pieces keep a shared document working.</p>
+      <div class="box ok">
+        <span class="box-title">Educational goal</span>
+        Learn microservice architecture, WebSocket, Redis, JWT authentication, and storing documents in a separate service.
+      </div>
+    </section>
+
+    <section class="section" id="big-picture">
+      <h2>2) Big picture</h2>
+      <p>Put simply, this project is composed of a few small programs where each one has a clear job.</p>
+      <p>Here, the frontend is what the user sees in the browser, the gateway is the main entry point, the document service is the central notebook, and PostgreSQL is the storage drawer.</p>
+      <div class="flow">
+        <span class="step">Frontend</span>
+        <span class="arrow">←→</span>
+        <span class="step">Gateway</span>
+        <span class="arrow">←→</span>
+        <span class="step">Document Service</span>
+        <span class="arrow">←→</span>
+        <span class="step">PostgreSQL</span>
+      </div>
+      <div class="flow">
+        <span class="step">Frontend</span>
+        <span class="arrow">←→</span>
+        <span class="step">Auth Service</span>
+        <span class="arrow">←→</span>
+        <span class="step">Auth PostgreSQL</span>
+      </div>
+      <div class="flow">
+        <span class="step">Document Service</span>
+        <span class="arrow">→</span>
+        <span class="step">Redis</span>
+        <span class="arrow">→</span>
+        <span class="step">Gateway</span>
+        <span class="arrow">→</span>
+        <span class="step">Clients</span>
+      </div>
+      <p>The important point is that the frontend does not talk directly to every service. Most requests go through the gateway.</p>
+      <div class="box info">
+        <span class="box-title">Simple extra note</span>
+        The gateway is the middleman. If the frontend wants to read a document or verify a token, it asks the gateway, and the gateway sends the message to the correct service.
+      </div>
+    </section>
+
+    <section class="section" id="services">
+      <h2>3) Services and responsibilities</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>Port</th>
+            <th>Main role</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>frontend</td>
+            <td><code>3000</code></td>
+            <td>Show the UI, open documents, edit documents, and send user requests</td>
+          </tr>
+          <tr>
+            <td>gateway</td>
+            <td><code>8080</code></td>
+            <td>Main entry point for the frontend, WebSocket handling, JWT checks, and proxying some APIs</td>
+          </tr>
+          <tr>
+            <td>document-service</td>
+            <td><code>8000</code></td>
+            <td>Create, read, update, and delete documents and folders. Also store <code>content</code> and <code>yjs_state</code></td>
+          </tr>
+          <tr>
+            <td>auth-service</td>
+            <td><code>8002</code></td>
+            <td>Register, login, refresh token, and identify users</td>
+          </tr>
+          <tr>
+            <td>export-service</td>
+            <td><code>8001</code></td>
+            <td>Convert document content to <code>html</code>, <code>markdown</code>, and <code>txt</code></td>
+          </tr>
+          <tr>
+            <td>redis</td>
+            <td><code>6379</code></td>
+            <td>Broadcast messages between services</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="box info">
+        <span class="box-title">Why are services separated?</span>
+        Because each service has a single responsibility. This makes the system easier to understand and keeps changes in one part from affecting the others.
+      </div>
+      <div class="box ok">
+        <span class="box-title">Simple example</span>
+        It is like having a kitchen, a cashier, and a guest room in separate spaces. Each one does its own job, and if something breaks, it is easier to find.
+      </div>
+    </section>
+
+    <section class="section" id="databases">
+      <h2>4) Databases</h2>
+      <p>In the current setup, the auth service and the document service use two separate databases.</p>
+      <ul>
+        <li><strong>Document database</strong>: for documents, folders, and document versions</li>
+        <li><strong>Auth database</strong>: for auth-service users</li>
+      </ul>
+      <div class="box ok">
+        <span class="box-title">Why is this separation important?</span>
+        Because user data and document data are different responsibilities. Keeping them separate makes the architecture cleaner and easier to maintain over time.
+      </div>
+      <p>In simple terms: a database is a box where data is stored. Each service has its own box so its data does not get mixed with the others.</p>
+    </section>
+
+    <section class="section" id="document-model">
+      <h2>5) Document data model</h2>
+      <p>Each document has a few important pieces:</p>
+      <ul>
+        <li><code>title</code>: the document title</li>
+        <li><code>content</code>: a simpler version of the content for display and fallback</li>
+        <li><code>yjs_state</code>: the collaborative document state for Yjs</li>
+      </ul>
+      <p>In simple learning terms: <code>title</code> is like the document name, <code>content</code> is like the plain text, and <code>yjs_state</code> is like a map that helps multiple people coordinate their edits together.</p>
+      <div class="box info">
+        <span class="box-title">Why is Yjs/CRDT implemented?</span>
+        Because when several people edit the same document at the same time, there needs to be a way to combine everyone’s changes without breaking the text. Yjs uses CRDT so this coordination becomes simpler and more reliable.
+        <p>Put simply: Yjs takes updates and merges them so all users eventually see the same synchronized text.</p>
+      </div>
+      <div class="box info">
+        <span class="box-title">Why do we have both content and yjs_state?</span>
+        Because <code>yjs_state</code> is needed for live collaboration, but for some simple displays or error cases, having <code>content</code> helps avoid showing an empty document.
+      </div>
+      <p>Every time a document is saved, a new version is also recorded in <code>DocumentVersion</code>.</p>
+    </section>
+
+    <section class="section" id="auth-flow">
+      <h2>6) Authentication flow</h2>
+      <p>User login is done with JWT.</p>
+      <p>A JWT is like a digital pass that the frontend uses to prove the user is allowed to access something.</p>
+      <ol>
+        <li>The user logs in or registers in the frontend.</li>
+        <li>The frontend sends a request to the <code>auth-service</code>.</li>
+        <li>If the credentials are valid, two tokens are returned: <code>access_token</code> and <code>refresh_token</code>.</li>
+        <li>The frontend uses the access token for API and WebSocket requests.</li>
+      </ol>
+      <h3>What happens when access token expires?</h3>
+      <ol>
+        <li>If one of the requests gets a <code>401</code>, the frontend tries to get a new access token using the <code>refresh_token</code>.</li>
+        <li>If refresh succeeds, the page reloads and starts again with the new token.</li>
+        <li>If refresh fails, the user is sent to the login page.</li>
+      </ol>
+      <div class="box warn">
+        <span class="box-title">Simple note</span>
+        The <code>access_token</code> is for everyday actions. The <code>refresh_token</code> is only used to get a new access token.
+      </div>
+    </section>
+
+    <section class="section" id="open-doc">
+      <h2>7) Open document flow</h2>
+      <p>When the user clicks a document or refreshes a document page, this path happens:</p>
+      <ol>
+        <li>The frontend reads the document ID from the URL.</li>
+        <li>The frontend sends <code>GET /api/documents/:id</code> to the gateway.</li>
+        <li>The gateway forwards the request to the document service.</li>
+        <li>The document service reads the document data from the database.</li>
+        <li>The response returns to the frontend.</li>
+        <li>If the <code>yjs_state</code> is valid, it is applied in Yjs.</li>
+        <li>If not, <code>content</code> is used as a fallback.</li>
+      </ol>
+      <p>In other words, the frontend does not read directly from the database; it asks the gateway first, and then the gateway asks the document service.</p>
+    </section>
+
+    <section class="section" id="edit-flow">
+      <h2>8) Edit and sync flow</h2>
+      <p>This is the most important part of the project architecture.</p>
+      <div class="box warn">
+        <span class="box-title">Current system policy</span>
+        Clients only update after the changes have been saved in the document service database. This means there is no direct client-to-client broadcast sync.
+      </div>
+      <h3>Full change path</h3>
+      <ol>
+        <li>The user types in the editor.</li>
+        <li>Yjs records the local change in the frontend.</li>
+        <li>The frontend triggers autosave.</li>
+        <li>The frontend sends <code>PATCH /api/documents/:id</code>.</li>
+        <li>The gateway forwards the request to the document service.</li>
+        <li>The document service saves the new content in PostgreSQL.</li>
+        <li>If <code>yjs_state</code> exists, the document service publishes a <code>sync-state</code> message to Redis.</li>
+        <li>The gateway, which subscribes to that channel, receives the message.</li>
+        <li>The gateway broadcasts the same message to clients connected to that document.</li>
+        <li>Other clients apply that state.</li>
+      </ol>
+      <div class="flow">
+        <span class="step">Edit in Browser</span>
+        <span class="arrow">→</span>
+        <span class="step">PATCH /api/documents/:id</span>
+        <span class="arrow">→</span>
+        <span class="step">Document Service Save</span>
+        <span class="arrow">→</span>
+        <span class="step">Redis sync-state</span>
+        <span class="arrow">→</span>
+        <span class="step">Gateway Broadcast</span>
+        <span class="arrow">→</span>
+        <span class="step">Other Clients Apply</span>
+      </div>
+      <h3>Why was this method chosen?</h3>
+      <p>Because this architecture is designed so that only data that is actually stored in the database is sent to the other clients. That means the source of truth is always the document service and its database.</p>
+      <div class="box info">
+        <span class="box-title">Simple reminder</span>
+        This means that if two people type at the same time, the system makes sure the changes are saved in the main document before everyone sees them.
+      </div>
+    </section>
+
+    <section class="section" id="export-flow">
+      <h2>9) Export flow</h2>
+      <p>The frontend also does not call the export-service directly for export. Like other APIs, it only calls the gateway.</p>
+      <ol>
+        <li>The user clicks Export in the frontend.</li>
+        <li>The frontend sends <code>POST /api/export?format=...</code> to the gateway.</li>
+        <li>The gateway proxies the request to the export service.</li>
+        <li>The export service converts the content to the desired format.</li>
+        <li>The output file returns to the browser.</li>
+      </ol>
+      <p>The export service only handles converting the text. The browser downloads the file and shows it to the user.</p>
+      <div class="box ok">
+        <span class="box-title">Why this is useful</span>
+        The frontend only knows one main entry point: the gateway. This keeps the architecture cleaner and simpler.
+      </div>
+    </section>
+
+    <section class="section" id="monitoring">
+      <h2>10) Monitoring and observability</h2>
+      <p>This section explains how to know if the system is healthy and where to look if something goes wrong.</p>
+      <h3>Main tools</h3>
+      <ul>
+        <li><strong>Prometheus</strong>: collecting metrics</li>
+        <li><strong>Grafana</strong>: showing metrics on a dashboard</li>
+        <li><strong>Jaeger</strong>: viewing traces</li>
+        <li><strong>redis-exporter</strong>: Redis metrics</li>
+        <li><strong>postgres-exporter</strong>: PostgreSQL metrics</li>
+        <li><strong>node-exporter</strong>: host system metrics</li>
+      </ul>
+      <div class="box info">
+        <span class="box-title">What are Grafana and Prometheus?</span>
+        Prometheus is like an eye that collects numbers and status from services. Grafana is like a board that shows those numbers as charts and tables so we can quickly see what is wrong.
+      </div>
+      <h3>Key metrics</h3>
+      <ul>
+        <li>Number of WebSocket connections in the gateway</li>
+        <li>Number of messages received by the gateway</li>
+        <li>Number of successful document saves</li>
+        <li>Number of document save errors</li>
+        <li>Number of Redis publishes from the document service</li>
+      </ul>
+      <h3>Simple monitoring flow</h3>
+      <ol>
+        <li>Services produce metrics.</li>
+        <li>Prometheus collects those metrics.</li>
+        <li>Grafana displays them.</li>
+        <li>If tracing is enabled, traces go to Jaeger.</li>
+      </ol>
+      <div class="box info">
+        <span class="box-title">Very simple</span>
+        Metrics tell us where the issue is. Traces help us understand which exact path failed.
+      </div>
+    </section>
+
+    <section class="section" id="limitations">
+      <h2>11) Current limitations</h2>
+      <ul>
+        <li>Because sync only happens after save, realtime feels a bit slower than direct broadcast.</li>
+        <li>In some cases, fallback display depends on <code>content</code>.</li>
+        <li>This is an educational project, so some security and production-level settings are intentionally kept simple.</li>
+      </ul>
+    </section>
+
+    <section class="section" id="summary">
+      <h2>12) Final summary</h2>
+      <p>To describe the entire architecture in a few sentences:</p>
+      <ul>
+        <li>The frontend shows the user interface.</li>
+        <li>The gateway is the main system entry point.</li>
+        <li>The document service is the source of truth for documents.</li>
+        <li>The auth service is the source of truth for users and tokens.</li>
+        <li>Redis is used for canonical message broadcasting.</li>
+        <li>Clients only update after changes are saved in the document database.</li>
+      </ul>
+      <div class="box ok">
+        <span class="box-title">One very important sentence</span>
+        In this architecture, the final document version is always determined by the document service, not the client.
+      </div>
+    </section>
+
+    <footer class="footer-note">
+      <p><strong>Last rule:</strong> If you see a difference between this document and the code, the code is correct and the document should be updated.</p>
+    </footer>
+  </div>
+</body>
+</html>

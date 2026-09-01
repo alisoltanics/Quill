@@ -13,22 +13,24 @@ services:
     environment:
       - REDIS_ADDR=redis:6379
       - DOCUMENT_SERVICE_URL=http://document-service:8000
+      - EXPORT_SERVICE_URL=http://export-service:8000
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       - OBSERVABILITY_ENABLED=${OBSERVABILITY_ENABLED:-false}
       - OTEL_SERVICE_NAME=realtime-gateway
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
     depends_on:
       - redis
       - jaeger
+      - export-service
+      - auth-service
 
   frontend:
-    image: node:18-alpine
-    working_dir: /app
+    build: ./services/frontend
+    restart: unless-stopped
     volumes:
       - ./services/frontend:/app:cached
-      - /app/node_modules
     ports:
       - "3000:3000"
-    command: sh -c "npm install && npm run dev"
     depends_on:
       - gateway
   document-service:
@@ -36,12 +38,16 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    volumes:
+      - ./services/document_service:/app:cached
     environment:
       - REDIS_ADDR=redis:6379
       - POSTGRES_HOST=postgres
       - POSTGRES_DB=docdb
       - POSTGRES_USER=docuser
       - POSTGRES_PASSWORD=docpass
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       - OBSERVABILITY_ENABLED=${OBSERVABILITY_ENABLED:-false}
       - OTEL_SERVICE_NAME=document-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
@@ -49,6 +55,7 @@ services:
       - redis
       - postgres
       - jaeger
+      - kafka
   postgres:
     image: postgres:15
     restart: unless-stopped
@@ -59,15 +66,97 @@ services:
     ports:
       - "5432:5432"
 
-  fastapi-service:
-    build: ./services/fastapi_service
+  audit-postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=auditdb
+      - POSTGRES_USER=docuser
+      - POSTGRES_PASSWORD=docpass
+    ports:
+      - "5434:5432"
+    volumes:
+      - audit_postgres_data:/var/lib/postgresql/data
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "22181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+
+  audit-service:
+    build: ./services/audit_service
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./services/audit_service:/app:cached
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003", "--reload"]
+    environment:
+      - DATABASE_URL=postgresql+psycopg://docuser:docpass@audit-postgres:5432/auditdb
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC=document.events
+    depends_on:
+      - audit-postgres
+      - kafka
+
+  export-service:
+    build: ./services/export_service
     restart: unless-stopped
     ports:
       - "8001:8000"
+    volumes:
+      - ./services/export_service:/app:cached
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     environment:
-      - REDIS_ADDR=redis:6379
+      - DOCUMENT_SERVICE_URL=http://document-service:8000
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
     depends_on:
-      - redis
+      - document-service
+
+  auth-service:
+    build: ./services/auth_service
+    restart: unless-stopped
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./services/auth_service:/app:cached
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://authuser:authpass@auth-postgres/authdb
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+    depends_on:
+      - auth-postgres
+
+  auth-postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=authdb
+      - POSTGRES_USER=authuser
+      - POSTGRES_PASSWORD=authpass
+    ports:
+      - "5433:5432"
+    volumes:
+      - auth_postgres_data:/var/lib/postgresql/data
 
   jaeger:
     image: jaegertracing/all-in-one:1.58
@@ -145,3 +234,5 @@ services:
 volumes:
   prometheus_data:
   grafana_data:
+  auth_postgres_data:
+  audit_postgres_data:
