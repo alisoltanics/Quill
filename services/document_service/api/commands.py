@@ -118,28 +118,34 @@ def update_document(
 
     ``content`` and ``folder_id`` use UNSET to distinguish "not provided"
     from ``None`` (which means "move to root" for folder_id).
+
+    Re-fetches the document row with SELECT FOR UPDATE to prevent lost
+    updates when two concurrent requests modify the same document.
     """
 
-    if title is not None:
-        doc.title = title
+    # Lock the row to serialize concurrent updates.
+    with transaction.atomic():
+        doc = Document.objects.select_for_update().get(pk=doc.pk)
 
-    if folder_id is not UNSET:
-        if folder_id is None:
-            doc.folder = None
-        else:
-            doc.folder = Folder.objects.get(pk=folder_id, user_id=user_id)
+        if title is not None:
+            doc.title = title
 
-    has_content = content is not UNSET
-    has_yjs = yjs_state is not None
+        if folder_id is not UNSET:
+            if folder_id is None:
+                doc.folder = None
+            else:
+                doc.folder = Folder.objects.get(pk=folder_id, user_id=user_id)
 
-    if has_content:
-        text = str(content)
-        doc.content = text if full_replace else (f"{doc.content}\n{text}" if doc.content else text)
-    if has_yjs:
-        doc.yjs_state = str(yjs_state)
+        has_content = content is not UNSET
+        has_yjs = yjs_state is not None
 
-    if has_content or has_yjs:
-        with transaction.atomic():
+        if has_content:
+            text = str(content)
+            doc.content = text if full_replace else (f"{doc.content}\n{text}" if doc.content else text)
+        if has_yjs:
+            doc.yjs_state = str(yjs_state)
+
+        if has_content or has_yjs:
             doc.save()
             version = DocumentVersion.objects.create(
                 document=doc,
@@ -161,16 +167,17 @@ def update_document(
                     "yjs_state": doc.yjs_state or "",
                 },
             )
+        else:
+            doc.save()
 
-        # Publish to Redis immediately (after transaction commits) for real-time sync
+    # Publish to Redis immediately (after transaction commits) for real-time sync
+    if has_content or has_yjs:
         _publish_to_redis({
             "type": "sync-state",
             "docId": doc.pk,
             "clientId": "document-service",
             "update": doc.yjs_state or "",
         })
-    else:
-        doc.save()
 
     return doc
 

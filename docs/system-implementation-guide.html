@@ -416,6 +416,7 @@
           <li><a href="#monitoring">مانیتورینگ و مشاهده پذیری</a></li>
           <li><a href="#limitations">محدودیت های فعلی</a></li>
           <li><a href="#system-design-concepts">مفاهیم طراحی سیستم برای تمرین و یادگیری</a></li>
+          <li><a href="#concurrency-fixes">رفع شرایط مسابقه</a></li>
           <li><a href="#summary">خلاصه نهایی</a></li>
         </ol>
       </div>
@@ -977,6 +978,70 @@ folder, created = Folder.objects.get_or_create(
       
       <h4>تضمین</h4>
       <p><strong>حداقل یک بار ارسال</strong> — هیچ رویدادی از بین نمی‌رود.</p>
+    </section>
+
+    <section class="section" id="concurrency-fixes">
+      <h2>۱۶.۵) رفع شرایط مسابقه (Race Conditions)</h2>
+      <p><strong>شرایط مسابقه</strong> زمانی اتفاق می‌افتد که دو یا چند عملیات همزمان اجرا شوند و سعی کنند به یک داده دسترسی پیدا کنند. اگر مدیریت نشود، یک عملیات می‌تواند نتیجه دیگری را بازنویسی یا خراب کند. در ادامه سه شرایط مسابقه که پیدا و رفع شدند آورده شده است.</p>
+
+      <h4> پردازش دوگانه پیام‌های Outbox</h4>
+      <p><strong>فایل:</strong> <code>services/document_service/api/outbox.py</code></p>
+      <p><strong>مشکل:</strong> پروسesor outbox با <code>published=False</code> ردیف‌ها را پیدا می‌کند و سپس آن‌ها را پردازش می‌کند. اگر دو worker همزمان اجرا شوند، هر دو ردیف‌های یکسان را query می‌کنند و رویدادهای یکسان را به Kafka ارسال می‌کنند — ارسال‌های تکراری ایجاد می‌شود.</p>
+      <p><strong>راه حل:</strong> استفاده از <code>SELECT ... FOR UPDATE SKIP LOCKED</code>. این ردیف‌ها را به صورت اتمیک قفل می‌کند تا worker دوم ردیف‌ها را رد کند.</p>
+      <pre><code># قبل (دو worker می‌توانند ردیف‌های یکسان را بردارند)
+messages = OutboxMessage.objects.filter(published=False)[:batch_size]
+
+# بعد (ردیف‌ها قفل شده‌اند، worker دوم آن‌ها را رد می‌کند)
+with transaction.atomic():
+    messages = list(
+        OutboxMessage.objects.select_for_update(skip_locked=True)
+        .filter(published=False)[:batch_size]
+    )</code></pre>
+
+      <h4> از دست رفتن آپدیت‌ها در ذخیره همزمان سند</h4>
+      <p><strong>فایل:</strong> <code>services/document_service/api/commands.py</code></p>
+      <p><strong>مشکل:</strong> دو کاربر همزمان روی یک سند ویرایش می‌کنند. هر دو سند را به صورت snapshot می‌خوانند، تغییرات را در حافظه اعمال می‌کنند و ذخیره می‌کنند. ذخیره دوم تغییرات عنوان یا فولدر کاربر اول را بازنویسی می‌کند.</p>
+      <p><strong>راهحل:</strong> استفاده از <code>SELECT FOR UPDATE</code> برای قفل کردن ردیف سند در دیتابیس.</p>
+      <pre><code># قبل (snapshot قدیمی می‌خواند، آخرین ذخیره برنده می‌شود)
+def update_document(doc, *, title=None, ...):
+    if title is not None:
+        doc.title = title
+    doc.save()
+
+# بعد (ردیف را قفل می‌کند، نوشتن‌های همزمان را سریالایز می‌کند)
+def update_document(doc, *, title=None, ...):
+    doc = Document.objects.select_for_update().get(pk=doc.pk)
+    if title is not None:
+        doc.title = title
+    doc.save()</code></pre>
+
+      <h4>جدول خلاصه</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>شرط مسابقه</th>
+            <th>فایل</th>
+            <th>تکنیک استفاده شده</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>پردازش دوگانه outbox</td>
+            <td><code>outbox.py</code></td>
+            <td><code>SELECT FOR UPDATE SKIP LOCKED</code></td>
+          </tr>
+          <tr>
+            <td>از دست رفتن آپدیت سند</td>
+            <td><code>commands.py</code></td>
+            <td><code>SELECT FOR UPDATE</code> (قفل ردیف)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="box ok">
+        <span class="box-title">نکته کلیدی</span>
+        در سیستم‌های توزیع‌شده، همیشه به این فکر کنید وقتی دو درخواست همزمان به یک منبع دسترسی پیدا می‌کنند چه اتفاقی می‌افتد. از قفل‌های دیتابیس، عملیات اتمیک یا پایپلاین استفاده کنید تا دسترسی را سریالایز و از خرابی داده جلوگیری کنید.
+      </div>
     </section>
 
     <section class="section" id="summary">

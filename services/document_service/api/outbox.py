@@ -54,31 +54,39 @@ def _publish_to_kafka(topic: str, payload: dict):
 def process_outbox(batch_size: int = 10):
     """Process pending outbox messages. Called periodically by the worker.
 
+    Uses SELECT ... FOR UPDATE SKIP LOCKED to atomically claim a batch of
+    messages, preventing concurrent workers from processing the same events.
+
     Returns the number of messages successfully published.
     """
+    from django.db import transaction
     from .models import OutboxMessage
 
-    messages = OutboxMessage.objects.filter(published=False)[:batch_size]
-    published_count = 0
+    with transaction.atomic():
+        messages = list(
+            OutboxMessage.objects.select_for_update(skip_locked=True)
+            .filter(published=False)[:batch_size]
+        )
+        published_count = 0
 
-    for msg in messages:
-        topic = _topic_for_event(msg.event_type)
+        for msg in messages:
+            topic = _topic_for_event(msg.event_type)
 
-        # Build payload for Kafka
-        payload = {
-            "event": msg.event_type,
-            "aggregate_type": msg.aggregate_type,
-            "aggregate_id": msg.aggregate_id,
-            "timestamp": msg.created_at.replace(microsecond=0).isoformat() + "Z",
-            **msg.payload,
-        }
+            # Build payload for Kafka
+            payload = {
+                "event": msg.event_type,
+                "aggregate_type": msg.aggregate_type,
+                "aggregate_id": msg.aggregate_id,
+                "timestamp": msg.created_at.replace(microsecond=0).isoformat() + "Z",
+                **msg.payload,
+            }
 
-        kafka_ok = _publish_to_kafka(topic, payload) if topic else True
+            kafka_ok = _publish_to_kafka(topic, payload) if topic else True
 
-        if kafka_ok:
-            msg.published = True
-            msg.save(update_fields=["published"])
-            published_count += 1
+            if kafka_ok:
+                msg.published = True
+                msg.save(update_fields=["published"])
+                published_count += 1
 
     return published_count
 

@@ -32,7 +32,8 @@
 14. [مانیتورینگ و مشاهده پذیری](#14-مانیتورینگ-و-مشاهده-پذیری)
 15. [محدودیت های فعلی](#15-محدودیت-های-فعلی)
 16. [مفاهیم طراحی سیستم برای تمرین و یادگیری](#16-مفاهیم-طراحی-سیستم-برای-تمرین-و-یادگیری)
-17. [خلاصه نهایی](#17-خلاصه-نهایی)
+17. [رفع شرایط مسابقه](#۱۶۵-رفع-شرایط-مسابقه-race-conditions)
+18. [خلاصه نهایی](#17-خلاصه-نهایی)
 
 ---
 
@@ -510,6 +511,84 @@ python manage.py run_outbox_processor --interval 5 --batch-size 10
 #### تضمین
 
 **حداقل یک بار ارسال** — رویدادها تا انتشار موفق دوباره تلاش می‌کنند.
+
+### ۱۶.۵ رفع شرایط مسابقه (Race Conditions)
+
+**شرط مسابقه** زمانی اتفاق می‌افتد که دو یا چند عملیات همزمان اجرا شوند و سعی کنند به یک داده دسترسی پیدا کنند. اگر مدیریت نشود، یک عملیات می‌تواند نتیجه دیگری را بازنویسی یا خراب کند. در ادامه سه شرایط مسابقه که پیدا و رفع شدند آورده شده است.
+
+#### مسابقه ۱: عملیات غیراتمیک Redis Presence
+
+**فایل:** `services/gateway/presence.go`
+
+**مشکل:** اضافه کردن کاربر به لیست آنلاین نیاز به دو دستور جداگانه Redis داشت: `ZADD` (اضافه کردن ایمیل) و `EXPIRE` (تنظیم TTL). اگر پروسه بین آن‌ها کرش کند، کلید بدون TTL برای همیشه باقی می‌ماند. مشکل مشابه در `getOnlineUsers` وجود داشت.
+
+**راه حل:** استفاده از **پایپلاین** Redis برای اجرای هر دو عملیات در یک round-trip.
+
+```go
+# قبل (دو round-trip جداگانه — پنجره مسابقه بین آن‌ها)
+rdb.ZAdd(ctx, key, &redis.Z{Score: score, Member: email})
+rdb.Expire(ctx, key, presenceTTL)
+
+# بعد (یک پایپلاین — اتمیک)
+pipe := rdb.Pipeline()
+pipe.ZAdd(ctx, key, &redis.Z{Score: score, Member: email})
+pipe.Expire(ctx, key, presenceTTL)
+pipe.Exec(ctx)
+```
+
+#### مسابقه ۲: پردازش دوگانه پیام‌های Outbox
+
+**فایل:** `services/document_service/api/outbox.py`
+
+**مشکل:** پروسesor outbox با `published=False` ردیف‌ها را پیدا می‌کند. اگر دو worker همزمان اجرا شوند، هر دو ردیف‌های یکسان را query می‌کنند و رویدادهای یکسان را به Kafka ارسال می‌کنند.
+
+**راه حل:** استفاده از `SELECT ... FOR UPDATE SKIP LOCKED`.
+
+```python
+# قبل (دو worker می‌توانند ردیف‌های یکسان را بردارند)
+messages = OutboxMessage.objects.filter(published=False)[:batch_size]
+
+# بعد (ردیف‌ها قفل شده‌اند، worker دوم آن‌ها را رد می‌کند)
+with transaction.atomic():
+    messages = list(
+        OutboxMessage.objects.select_for_update(skip_locked=True)
+        .filter(published=False)[:batch_size]
+    )
+```
+
+#### مسابقه ۳: از دست رفتن آپدیت‌ها در ذخیره همزمان سند
+
+**فایل:** `services/document_service/api/commands.py`
+
+**مشکل:** دو کاربر همزمان روی یک سند ویرایش می‌کنند. هر دو سند را به صورت snapshot می‌خوانند و ذخیره می‌کنند. ذخیره دوم تغییرات کاربر اول را بازنویسی می‌کند.
+
+**راه حل:** استفاده از `SELECT FOR UPDATE` برای قفل کردن ردیف سند.
+
+```python
+# قبل (snapshot قدیمی می‌خواند، آخرین ذخیره برنده می‌شود)
+def update_document(doc, *, title=None, ...):
+    if title is not None:
+        doc.title = title
+    doc.save()
+
+# بعد (ردیف را قفل می‌کند، نوشتن‌های همزمان را سریالایز می‌کند)
+def update_document(doc, *, title=None, ...):
+    doc = Document.objects.select_for_update().get(pk=doc.pk)
+    if title is not None:
+        doc.title = title
+    doc.save()
+```
+
+#### جدول خلاصه
+
+| شرط مسابقه | فایل | تکنیک استفاده شده |
+|------------|------|-------------------|
+| عملیات غیراتمیک Redis presence | `presence.go` | پایپلاین Redis |
+| پردازش دوگانه outbox | `outbox.py` | `SELECT FOR UPDATE SKIP LOCKED` |
+| از دست رفتن آپدیت سند | `commands.py` | `SELECT FOR UPDATE` (قفل ردیف) |
+
+> **✅ نکته کلیدی**
+> در سیستم‌های توزیع‌شده، همیشه به این فکر کنید وقتی دو درخواست همزمان به یک منبع دسترسی پیدا می‌کنند چه اتفاقی می‌افتد.
 
 ---
 

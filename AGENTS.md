@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Important Rules
+
+- **Only commit and push when the user explicitly asks.** Never commit or push automatically.
+
 ## Project Purpose
 
 This is a **learning project** — a real-time collaborative document system built

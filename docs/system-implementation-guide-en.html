@@ -416,6 +416,7 @@
           <li><a href="#monitoring">Monitoring and Observability</a></li>
           <li><a href="#limitations">Current Limitations</a></li>
           <li><a href="#system-design-concepts">System Design Concepts for Practice and Learning</a></li>
+          <li><a href="#concurrency-fixes">Concurrency and Race Condition Fixes</a></li>
           <li><a href="#summary">Final Summary</a></li>
         </ol>
       </div>
@@ -1017,7 +1018,76 @@ gateway_circuit_breaker_rejections_total{service="export-service"}</code></pre>
       <h4>Guarantee</h4>
       <p><strong>At-least-once delivery</strong> — no events are lost.</p>
 
-      <h3>16.5 Other System Design Concepts (Future Practice)</h3>
+      <h3 id="concurrency-fixes">16.5 Concurrency and Race Condition Fixes (Implemented)</h3>
+      <p>A <strong>race condition</strong> happens when two or more operations run at the same time and try to access the same data. If not handled, one operation can overwrite or corrupt the other's result. Below are the three race conditions we found and fixed.</p>
+
+      <h4>Race 1: Double-Processing of Outbox Messages</h4>
+      <p><strong>File:</strong> <code>services/document_service/api/outbox.py</code></p>
+      <p><strong>The problem:</strong> The outbox processor queries <code>published=False</code> to find pending events, then processes them one by one. If two worker instances run at the same time, both query the same rows and both publish the same events to Kafka — causing duplicate deliveries.</p>
+      <p><strong>The fix:</strong> Wrap the query in <code>SELECT ... FOR UPDATE SKIP LOCKED</code>. This atomically locks the selected rows so that a second worker skips them and only picks up unclaimed rows.</p>
+      <pre><code># Before (two workers can pick up the same rows)
+messages = OutboxMessage.objects.filter(published=False)[:batch_size]
+
+# After (rows are locked, second worker skips them)
+with transaction.atomic():
+    messages = list(
+        OutboxMessage.objects.select_for_update(skip_locked=True)
+        .filter(published=False)[:batch_size]
+    )</code></pre>
+
+      <h4>Race 3: Lost Updates on Concurrent Document Saves</h4>
+      <p><strong>File:</strong> <code>services/document_service/api/commands.py</code></p>
+      <p><strong>The problem:</strong> Two users editing the same document simultaneously. Both read the same document snapshot, make changes in memory, and save. The second save overwrites the first user's title or folder changes — the first user's changes are silently lost.</p>
+      <p><strong>The fix:</strong> Re-fetch the document row with <code>SELECT FOR UPDATE</code> inside <code>update_document</code>. This locks the database row, so if two requests hit the same document, the second one waits until the first commits. No changes are lost.</p>
+      <pre><code># Before (reads stale snapshot, last save wins)
+def update_document(doc, *, title=None, ...):
+    if title is not None:
+        doc.title = title
+    doc.save()
+
+# After (locks the row, serializes concurrent writes)
+def update_document(doc, *, title=None, ...):
+    doc = Document.objects.select_for_update().get(pk=doc.pk)
+    if title is not None:
+        doc.title = title
+    doc.save()</code></pre>
+
+
+
+      <h4>Summary Table</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Race Condition</th>
+            <th>File</th>
+            <th>Technique Used</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Non-atomic Redis presence</td>
+            <td><code>presence.go</code></td>
+            <td>Redis pipeline</td>
+          </tr>
+          <tr>
+            <td>Double-processing outbox</td>
+            <td><code>outbox.py</code></td>
+            <td><code>SELECT FOR UPDATE SKIP LOCKED</code></td>
+          </tr>
+          <tr>
+            <td>Lost document updates</td>
+            <td><code>commands.py</code></td>
+            <td><code>SELECT FOR UPDATE</code> (row lock)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="box ok">
+        <span class="box-title">Key Takeaway</span>
+        In distributed systems, always think about what happens when two requests hit the same resource at the same time. Use database locks, atomic operations, or pipelines to serialize access and prevent data corruption.
+      </div>
+
+      <h3>16.6 Other System Design Concepts (Future Practice)</h3>
       <p>While idempotency, circuit breaker, and CQRS are implemented, other important concepts can be added for further learning:</p>
       <ol>
         <li><del><strong>Circuit Breaker Pattern</strong></del> <span style="color: var(--ok);">&#10003; Implemented</span></li>

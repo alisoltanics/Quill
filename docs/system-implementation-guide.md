@@ -31,7 +31,8 @@ This document is written from the ground up in simple language so that a beginne
 14. [Monitoring and Observability](#14-monitoring-and-observability)
 15. [Current Limitations](#15-current-limitations)
 16. [System Design Concepts for Practice and Learning](#16-system-design-concepts-for-practice-and-learning)
-17. [Final Summary](#17-final-summary)
+17. [Concurrency and Race Condition Fixes](#165-concurrency-and-race-condition-fixes-implemented)
+18. [Final Summary](#17-final-summary)
 
 ---
 
@@ -678,7 +679,85 @@ python manage.py run_outbox_processor --interval 5 --batch-size 10
 
 **At-least-once delivery** — events are retried until successfully published. No events are lost, even if Kafka or Redis is temporarily unavailable.
 
-### 16.5 Other System Design Concepts (Future Practice)
+### 16.5 Concurrency and Race Condition Fixes (Implemented)
+
+A **race condition** happens when two or more operations run at the same time and try to access the same data. If not handled, one operation can overwrite or corrupt the other's result. Below are the three race conditions we found and fixed.
+
+#### Race 1: Non-Atomic Redis Presence Operations
+
+**File:** `services/gateway/presence.go`
+
+**The problem:** Adding a user to the online list required two separate Redis commands: `ZADD` (add email) and `EXPIRE` (set TTL). If the process crashed between them, the key would exist forever without a TTL, causing stale presence data to accumulate. The same issue existed in `getOnlineUsers`: `ZREMRANGEBYSCORE` (cleanup) and `ZRANGE` (read list) were separate calls — stale entries could be re-added between cleanup and read.
+
+**The fix:** Use Redis **pipelines** to execute both operations in a single round-trip.
+
+```go
+# Before (two separate round-trips — race window between them)
+rdb.ZAdd(ctx, key, &redis.Z{Score: score, Member: email})
+rdb.Expire(ctx, key, presenceTTL)
+
+# After (one pipeline — atomic)
+pipe := rdb.Pipeline()
+pipe.ZAdd(ctx, key, &redis.Z{Score: score, Member: email})
+pipe.Expire(ctx, key, presenceTTL)
+pipe.Exec(ctx)
+```
+
+#### Race 2: Double-Processing of Outbox Messages
+
+**File:** `services/document_service/api/outbox.py`
+
+**The problem:** The outbox processor queries `published=False` to find pending events, then processes them one by one. If two worker instances run at the same time, both query the same rows and both publish the same events to Kafka — causing duplicate deliveries.
+
+**The fix:** Wrap the query in `SELECT ... FOR UPDATE SKIP LOCKED`. This atomically locks the selected rows so that a second worker skips them and only picks up unclaimed rows.
+
+```python
+# Before (two workers can pick up the same rows)
+messages = OutboxMessage.objects.filter(published=False)[:batch_size]
+
+# After (rows are locked, second worker skips them)
+with transaction.atomic():
+    messages = list(
+        OutboxMessage.objects.select_for_update(skip_locked=True)
+        .filter(published=False)[:batch_size]
+    )
+```
+
+#### Race 3: Lost Updates on Concurrent Document Saves
+
+**File:** `services/document_service/api/commands.py`
+
+**The problem:** Two users editing the same document simultaneously. Both read the same document snapshot, make changes in memory, and save. The second save overwrites the first user's title or folder changes — the first user's changes are silently lost.
+
+**The fix:** Re-fetch the document row with `SELECT FOR UPDATE` inside `update_document`. This locks the database row, so if two requests hit the same document, the second one waits until the first commits. No changes are lost.
+
+```python
+# Before (reads stale snapshot, last save wins)
+def update_document(doc, *, title=None, ...):
+    if title is not None:
+        doc.title = title
+    doc.save()
+
+# After (locks the row, serializes concurrent writes)
+def update_document(doc, *, title=None, ...):
+    doc = Document.objects.select_for_update().get(pk=doc.pk)
+    if title is not None:
+        doc.title = title
+    doc.save()
+```
+
+#### Summary Table
+
+| Race Condition | File | Technique Used |
+|----------------|------|----------------|
+| Non-atomic Redis presence | `presence.go` | Redis pipeline |
+| Double-processing outbox | `outbox.py` | `SELECT FOR UPDATE SKIP LOCKED` |
+| Lost document updates | `commands.py` | `SELECT FOR UPDATE` (row lock) |
+
+> **✅ Key Takeaway**
+> In distributed systems, always think about what happens when two requests hit the same resource at the same time. Use database locks, atomic operations, or pipelines to serialize access and prevent data corruption.
+
+### 16.6 Other System Design Concepts (Future Practice)
 
 While idempotency and circuit breaker are implemented, other important concepts can be added for further learning:
 
