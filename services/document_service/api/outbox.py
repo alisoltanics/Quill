@@ -81,18 +81,13 @@ def process_outbox(batch_size: int = 10):
         topic = _topic_for_event(msg.event_type)
 
         # Build gateway envelope format that the gateway expects
-        # Gateway requires: type, docId (int), clientId (string)
+        # Gateway requires: type, docId (int), clientId (string), update (base64 yjs state)
+        yjs_state = msg.payload.get("yjs_state", "")
         envelope = {
             "type": "sync-state",
             "docId": msg.aggregate_id,
             "clientId": "document-service",
-            "update": json.dumps({
-                "event": msg.event_type,
-                "aggregate_type": msg.aggregate_type,
-                "aggregate_id": msg.aggregate_id,
-                "timestamp": msg.created_at.replace(microsecond=0).isoformat() + "Z",
-                **msg.payload,
-            }),
+            "update": yjs_state,
         }
 
         kafka_ok = _publish_to_kafka(topic, envelope) if topic else True

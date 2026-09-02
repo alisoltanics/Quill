@@ -140,6 +140,7 @@ def update_document(
                     "version": version.pk,
                     "client_id": client_id or "",
                     "action": "updated",
+                    "yjs_state": doc.yjs_state or "",
                 },
             )
     else:
