@@ -1,11 +1,10 @@
-"""Outbox processor — publishes pending events to Kafka/Redis.
+"""Outbox processor — publishes pending events to Kafka.
 
 Runs as a background thread. Polls the OutboxMessage table for unpublished
-events, publishes them, and marks them as published.
+events, publishes them to Kafka, and marks them as published.
 
-This guarantees at-least-once delivery: events are written to the outbox
-in the same transaction as the business data, so no events are lost even
-if Kafka/Redis is temporarily unavailable.
+Redis publishing happens immediately in commands.py for real-time sync.
+The outbox only handles Kafka delivery (for audit logging).
 """
 
 import json
@@ -13,7 +12,6 @@ import logging
 import os
 import time
 
-import redis
 from kafka import KafkaProducer
 
 logger = logging.getLogger(__name__)
@@ -37,20 +35,6 @@ def _get_kafka_producer():
     except Exception:
         logger.exception("Failed to create Kafka producer")
         return None
-
-
-def _publish_to_redis(payload: dict):
-    """Publish event to Redis for real-time gateway sync."""
-    addr = os.environ.get("REDIS_ADDR")
-    if not addr:
-        return False
-    try:
-        r = redis.Redis.from_url(f"redis://{addr}")
-        r.publish("gateway:events", json.dumps(payload))
-        return True
-    except redis.RedisError:
-        logger.warning("Redis publish failed", exc_info=True)
-        return False
 
 
 def _publish_to_kafka(topic: str, payload: dict):
@@ -80,20 +64,18 @@ def process_outbox(batch_size: int = 10):
     for msg in messages:
         topic = _topic_for_event(msg.event_type)
 
-        # Build gateway envelope format that the gateway expects
-        # Gateway requires: type, docId (int), clientId (string), update (base64 yjs state)
-        yjs_state = msg.payload.get("yjs_state", "")
-        envelope = {
-            "type": "sync-state",
-            "docId": msg.aggregate_id,
-            "clientId": "document-service",
-            "update": yjs_state,
+        # Build payload for Kafka
+        payload = {
+            "event": msg.event_type,
+            "aggregate_type": msg.aggregate_type,
+            "aggregate_id": msg.aggregate_id,
+            "timestamp": msg.created_at.replace(microsecond=0).isoformat() + "Z",
+            **msg.payload,
         }
 
-        kafka_ok = _publish_to_kafka(topic, envelope) if topic else True
-        redis_ok = _publish_to_redis(envelope) if msg.event_type == "document.updated" else True
+        kafka_ok = _publish_to_kafka(topic, payload) if topic else True
 
-        if kafka_ok and redis_ok:
+        if kafka_ok:
             msg.published = True
             msg.save(update_fields=["published"])
             published_count += 1
@@ -121,7 +103,7 @@ def run_forever(poll_interval: int = 5, batch_size: int = 10):
         try:
             count = process_outbox(batch_size)
             if count:
-                logger.info("Published %d outbox messages", count)
+                logger.info("Published %d outbox messages to Kafka", count)
         except Exception:
             logger.exception("Outbox processor error")
         time.sleep(poll_interval)

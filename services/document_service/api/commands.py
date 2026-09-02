@@ -5,15 +5,18 @@ responsible for:
 - Validating input
 - Persisting changes to the write database
 - Creating version snapshots
-- Writing events to the outbox (for reliable async publishing)
+- Publishing immediately to Redis (real-time sync)
+- Writing events to the outbox (for reliable Kafka delivery)
 
 Commands return the affected model instance (or None on failure).
 """
 
 import json
 import logging
+import os
 from datetime import datetime
 
+import redis
 from django.db import transaction
 
 from .models import Document, DocumentPermission, DocumentVersion, Folder, OutboxMessage
@@ -22,6 +25,21 @@ logger = logging.getLogger(__name__)
 
 # Sentinel shared between commands and views
 UNSET = object()
+
+
+def _publish_to_redis(payload: dict):
+    """Publish event to Redis immediately for real-time gateway sync."""
+    addr = os.environ.get("REDIS_ADDR")
+    if not addr:
+        return False
+    try:
+        r = redis.Redis.from_url(f"redis://{addr}")
+        r.publish("gateway:events", json.dumps(payload))
+        return True
+    except redis.RedisError:
+        logger.warning("Redis publish failed", exc_info=True)
+        return False
+
 
 def _write_outbox(aggregate_type: str, aggregate_id: int, event_type: str, payload: dict):
     """Write an event to the outbox table. Called within the same transaction
@@ -129,7 +147,7 @@ def update_document(
                 yjs_state=doc.yjs_state,
                 client_id=client_id,
             )
-            # Write event to outbox in the same transaction
+            # Write event to outbox in the same transaction (for Kafka)
             _write_outbox(
                 aggregate_type="document",
                 aggregate_id=doc.pk,
@@ -143,6 +161,14 @@ def update_document(
                     "yjs_state": doc.yjs_state or "",
                 },
             )
+
+        # Publish to Redis immediately (after transaction commits) for real-time sync
+        _publish_to_redis({
+            "type": "sync-state",
+            "docId": doc.pk,
+            "clientId": "document-service",
+            "update": doc.yjs_state or "",
+        })
     else:
         doc.save()
 
