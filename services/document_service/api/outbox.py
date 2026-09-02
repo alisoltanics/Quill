@@ -79,16 +79,24 @@ def process_outbox(batch_size: int = 10):
 
     for msg in messages:
         topic = _topic_for_event(msg.event_type)
-        payload = {
-            "event": msg.event_type,
-            "aggregate_type": msg.aggregate_type,
-            "aggregate_id": msg.aggregate_id,
-            "timestamp": msg.created_at.replace(microsecond=0).isoformat() + "Z",
-            **msg.payload,
+
+        # Build gateway envelope format that the gateway expects
+        # Gateway requires: type, docId (int), clientId (string)
+        envelope = {
+            "type": "sync-state",
+            "docId": msg.aggregate_id,
+            "clientId": "document-service",
+            "update": json.dumps({
+                "event": msg.event_type,
+                "aggregate_type": msg.aggregate_type,
+                "aggregate_id": msg.aggregate_id,
+                "timestamp": msg.created_at.replace(microsecond=0).isoformat() + "Z",
+                **msg.payload,
+            }),
         }
 
-        kafka_ok = _publish_to_kafka(topic, payload) if topic else True
-        redis_ok = _publish_to_redis(payload) if msg.event_type == "document.updated" else True
+        kafka_ok = _publish_to_kafka(topic, envelope) if topic else True
+        redis_ok = _publish_to_redis(envelope) if msg.event_type == "document.updated" else True
 
         if kafka_ok and redis_ok:
             msg.published = True
