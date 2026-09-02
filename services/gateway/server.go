@@ -21,7 +21,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -81,12 +81,22 @@ func buildServer(cfg appConfig, hub *Hub, rdb *redis.Client) *http.Server {
 
 	if cfg.ExportServiceURL != "" {
 		// Route export requests through the gateway so frontend only calls gateway.
-		mux.Handle("/api/export", wrap(newReverseProxy(cfg.ExportServiceURL, "/api"), "/api/export"))
-		mux.Handle("/api/export/", wrap(newReverseProxy(cfg.ExportServiceURL, "/api"), "/api/export/"))
+		exportCB := NewCircuitBreaker("export-service", DefaultCircuitBreakerConfig())
+		exportCB.onStateChange = func(from, to int) {
+			gatewayCircuitBreakerTransitions.WithLabelValues("export-service", stateName(from), stateName(to)).Inc()
+		}
+		exportProxy := newCircuitBreakerHandler(exportCB, newReverseProxy(cfg.ExportServiceURL, "/api"), nil)
+		mux.Handle("/api/export", wrap(exportProxy, "/api/export"))
+		mux.Handle("/api/export/", wrap(exportProxy, "/api/export/"))
 	}
 
 	if cfg.DocumentServiceURL != "" {
-		mux.Handle("/api/", wrap(newReverseProxy(cfg.DocumentServiceURL, "/api"), "/api/"))
+		docCB := NewCircuitBreaker("document-service", DefaultCircuitBreakerConfig())
+		docCB.onStateChange = func(from, to int) {
+			gatewayCircuitBreakerTransitions.WithLabelValues("document-service", stateName(from), stateName(to)).Inc()
+		}
+		docProxy := newCircuitBreakerHandler(docCB, newReverseProxy(cfg.DocumentServiceURL, "/api"), nil)
+		mux.Handle("/api/", wrap(docProxy, "/api/"))
 	}
 
 	return &http.Server{

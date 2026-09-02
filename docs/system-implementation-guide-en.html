@@ -415,6 +415,7 @@
           <li><a href="#export-flow">Export Flow</a></li>
           <li><a href="#monitoring">Monitoring and Observability</a></li>
           <li><a href="#limitations">Current Limitations</a></li>
+          <li><a href="#system-design-concepts">System Design Concepts for Practice and Learning</a></li>
           <li><a href="#summary">Final Summary</a></li>
         </ol>
       </div>
@@ -483,8 +484,54 @@
       </div>
     </section>
 
+    <section class="section" id="principles">
+      <h2>3) Microservice Principles We Follow</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Principle</th>
+            <th>How we applied it</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Single Responsibility</strong></td>
+            <td>Each service does one thing: Auth (login), Document (CRUD), Audit (logging), Export (PDF/HTML)</td>
+          </tr>
+          <tr>
+            <td><strong>Decentralized Data</strong></td>
+            <td>Each service owns its own database: <code>postgres-auth</code>, <code>postgres</code>, <code>audit-postgres</code></td>
+          </tr>
+          <tr>
+            <td><strong>API Gateway</strong></td>
+            <td>Gateway is the single entry point — handles WebSocket + proxies REST</td>
+          </tr>
+          <tr>
+            <td><strong>Event-Driven</strong></td>
+            <td>Document service publishes to Kafka → Audit service consumes asynchronously</td>
+          </tr>
+          <tr>
+            <td><strong>Independent Deployment</strong></td>
+            <td>Each service has its own <code>Dockerfile</code></td>
+          </tr>
+          <tr>
+            <td><strong>Observability</strong></td>
+            <td>Prometheus metrics, Jaeger tracing, structured logging</td>
+          </tr>
+          <tr>
+            <td><strong>Resilience</strong></td>
+            <td>Circuit breaker on downstream calls to prevent cascading failures</td>
+          </tr>
+          <tr>
+            <td><strong>Loose Coupling</strong></td>
+            <td>Services communicate only via HTTP, Redis, or Kafka — no shared DB</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <section class="section" id="services">
-      <h2>3) Services and Responsibilities</h2>
+      <h2>4) Services and Responsibilities</h2>
       <table>
         <thead>
           <tr>
@@ -538,7 +585,7 @@
     </section>
 
     <section class="section" id="databases">
-      <h2>4) Databases</h2>
+      <h2>5) Databases</h2>
       <p>In the current state, the authentication service and the document service use two separate databases.</p>
       <ul>
         <li><strong>document database</strong>: For documents, folders, and document versions</li>
@@ -551,7 +598,7 @@
     </section>
 
     <section class="section" id="document-model">
-      <h2>5) Document Data Model</h2>
+      <h2>6) Document Data Model</h2>
       <p>Each document has several important fields:</p>
       <ul>
         <li><code>title</code>: The document title</li>
@@ -572,7 +619,7 @@
     </section>
 
     <section class="section" id="auth-flow">
-      <h2>6) Authentication Flow</h2>
+      <h2>7) Authentication Flow</h2>
       <p>User login is handled with JWT.</p>
       <ol>
         <li>The user logs in or registers in the frontend.</li>
@@ -593,7 +640,7 @@
     </section>
 
     <section class="section" id="open-doc">
-      <h2>7) Opening a Document Flow</h2>
+      <h2>8) Opening a Document Flow</h2>
       <p>When a user clicks on a document or refreshes the page with a document URL, the following path is taken:</p>
       <ol>
         <li>The frontend determines which document to open from the URL.</li>
@@ -608,7 +655,7 @@
     </section>
 
     <section class="section" id="edit-flow">
-      <h2>8) Edit and Sync Flow</h2>
+      <h2>9) Edit and Sync Flow</h2>
       <p>This is the most important part of the project architecture.</p>
       <div class="box warn">
         <span class="box-title">Current System Policy</span>
@@ -650,7 +697,7 @@
     </section>
 
     <section class="section" id="presence">
-      <h2>9) Online Users (Presence)</h2>
+      <h2>10) Online Users (Presence)</h2>
       <h3>Data Structure in Redis</h3>
       <p>A <strong>Sorted Set</strong> named <code>doc:{docId}:online</code> is used. Each member is a user's email, and the score is the last activity time (Unix timestamp).</p>
       <pre><code>Redis Key:   doc:42:online
@@ -694,7 +741,7 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
     </section>
 
     <section class="section" id="remote-cursors">
-      <h2>10) Remote Cursors</h2>
+      <h2>11) Remote Cursors</h2>
       <p>Each user can see other users' cursors live in the document. The cursor color is determined based on the user's email, and hovering over the cursor shows the user's email.</p>
       <h3>Sending Cursor Position</h3>
       <ol>
@@ -730,7 +777,7 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
     </section>
 
     <section class="section" id="audit-flow">
-      <h2>11) Audit Service and Kafka</h2>
+      <h2>12) Audit Service and Kafka</h2>
       <p>After the Document Service saves changes to PostgreSQL, it publishes an independent event to Kafka.</p>
       <p>This event is sent as a <code>document.updated</code> message and includes the document ID, user ID, version, timestamp, and client ID.</p>
       <p>The Audit Service independently consumes this topic and records each event in the <code>audit_activity</code> table.</p>
@@ -746,7 +793,7 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
     </section>
 
     <section class="section" id="export-flow">
-      <h2>12) Export Flow</h2>
+      <h2>13) Export Flow</h2>
       <p>For exports, the frontend does not go directly to the export-service. Like other APIs, it only calls the Gateway.</p>
       <ol>
         <li>The user clicks Export in the frontend.</li>
@@ -763,7 +810,7 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
     </section>
 
     <section class="section" id="monitoring">
-      <h2>13) Monitoring and Observability</h2>
+      <h2>14) Monitoring and Observability</h2>
       <p>This section is for understanding whether the system is healthy, and if a problem occurs, where to look for the cause.</p>
       <h3>Key Tools</h3>
       <ul>
@@ -800,7 +847,7 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
     </section>
 
     <section class="section" id="limitations">
-      <h2>14) Current Limitations</h2>
+      <h2>15) Current Limitations</h2>
       <ul>
         <li>Since sync only happens after save, real-time is slightly slower than direct broadcast.</li>
         <li>In some cases, fallback display depends on <code>content</code>.</li>
@@ -808,8 +855,134 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
       </ul>
     </section>
 
+    <section class="section" id="system-design-concepts">
+      <h2>16) System Design Concepts for Practice and Learning</h2>
+      <p>This section covers key system design concepts implemented in this project for educational purposes. These patterns are essential for building reliable distributed systems.</p>
+      
+      <h3>16.1 Idempotency</h3>
+      <p><strong>What is idempotency?</strong><br>
+      Idempotency means that performing an operation multiple times has the same effect as performing it once. This is crucial in distributed systems where network issues can cause duplicate requests.</p>
+      
+      <p><strong>Why is it important?</strong></p>
+      <ul>
+        <li>Prevents duplicate data creation when retries happen</li>
+        <li>Ensures system consistency despite network failures</li>
+        <li>Common in payment systems, API design, and distributed transactions</li>
+      </ul>
+      
+      <p><strong>How we implemented idempotency:</strong></p>
+      <ol>
+        <li><strong>Client-side</strong>: The frontend generates a unique idempotency key (UUID) for each folder creation request and sends it in the <code>Idempotency-Key</code> header.</li>
+        <li><strong>Server-side</strong>: The Document Service extracts the key from the request header and uses Django's <code>get_or_create</code> with a partial unique constraint on <code>(user_id, idempotency_key)</code>.</li>
+        <li><strong>Database constraint</strong>: A partial unique index ensures that only one folder can exist per user with a given idempotency key (NULL keys are excluded).</li>
+      </ol>
+      
+      <p><strong>Code flow:</strong></p>
+      <pre><code># Frontend: generates unique key per operation
+const key = crypto.randomUUID();
+await authFetch('/folders', {
+  method: 'POST',
+  headers: { 'Idempotency-Key': key },
+  body: JSON.stringify({ name: 'New Folder' })
+});
+
+# Backend: uses get_or_create with the key
+folder, created = Folder.objects.get_or_create(
+    user_id=uid,
+    idempotency_key=key,
+    defaults={"name": name},
+)
+# Returns 201 if created, 200 if replayed</code></pre>
+      
+      <p><strong>Key benefits demonstrated:</strong></p>
+      <ul>
+        <li>Prevents duplicate folders from network retries</li>
+        <li>Different users can use the same key (scoped per user)</li>
+        <li>Without key, operations are not idempotent (two creates = two folders)</li>
+        <li>Oversized keys are rejected (max 255 characters)</li>
+      </ul>
+      
+      <p><strong>Testing idempotency:</strong></p>
+      <ul>
+        <li>First request with key: creates folder (201)</li>
+        <li>Second request with same key: returns same folder (200)</li>
+        <li>Different keys: create separate folders</li>
+        <li>Same key, different user: creates separate folders (user scoping)</li>
+      </ul>
+      
+      <h3>16.2 Circuit Breaker Pattern (Implemented)</h3>
+      
+      <h4>The Problem</h4>
+      <p>If the Document Service goes down, the Gateway keeps sending requests to it, wasting time and resources. Clients wait and get errors anyway.</p>
+      
+      <h4>The Solution</h4>
+      <p>A circuit breaker acts like an electrical fuse. After seeing enough failures, it <strong>stops sending requests</strong> and immediately returns "service unavailable."</p>
+      
+      <h4>Three States</h4>
+      <table>
+        <tr><th>State</th><th>What happens</th></tr>
+        <tr><td><strong>Closed</strong> (normal)</td><td>Requests go through. Failures are counted.</td></tr>
+        <tr><td><strong>Open</strong> (broken)</td><td>Requests blocked immediately. Returns 503. No waiting.</td></tr>
+        <tr><td><strong>Half-Open</strong> (testing)</td><td>After 10 seconds, one request is allowed through to test if service recovered.</td></tr>
+      </table>
+      
+      <h4>Default Settings</h4>
+      <table>
+        <tr><th>Setting</th><th>Value</th><th>What it means</th></tr>
+        <tr><td>Fail threshold</td><td>5</td><td>Number of failures before circuit opens</td></tr>
+        <tr><td>Success threshold</td><td>2</td><td>Number of successes to close circuit again</td></tr>
+        <tr><td>Open timeout</td><td>10s</td><td>How long to wait before testing again</td></tr>
+      </table>
+      
+      <h4>Where It Protects</h4>
+      <ul>
+        <li><code>/api/</code> → Document Service proxy</li>
+        <li><code>/api/export</code> → Export Service proxy</li>
+      </ul>
+      
+      <h4>Example Scenario</h4>
+      <ol>
+        <li>Document service starts returning 500 errors</li>
+        <li>After 5 consecutive failures, the circuit opens</li>
+        <li>Gateway immediately returns 503 to clients (fast fail, no waiting)</li>
+        <li>After 10 seconds, the circuit goes half-open and allows one probe</li>
+        <li>If the probe succeeds (200 OK), the circuit closes and normal flow resumes</li>
+      </ol>
+      
+      <h4>Prometheus Metrics</h4>
+      <pre><code># State transitions per service
+gateway_circuit_breaker_transitions_total{service="document-service", from="closed", to="open"}
+
+# Requests rejected by circuit breaker
+gateway_circuit_breaker_rejections_total{service="export-service"}</code></pre>
+      
+      <h4>Files</h4>
+      <ul>
+        <li><code>services/gateway/circuit_breaker.go</code> — implementation</li>
+        <li><code>services/gateway/circuit_breaker_test.go</code> — 14 unit tests</li>
+      </ul>
+
+      <h3>16.3 Other System Design Concepts (Future Practice)</h3>
+      <p>While idempotency and circuit breaker are implemented, other important concepts can be added for further learning:</p>
+      <ol>
+        <li><del><strong>Circuit Breaker Pattern</strong></del> <span style="color: var(--ok);">&#10003; Implemented</span></li>
+        <li><strong>Bulkhead Pattern</strong>: Isolate components to prevent failure propagation</li>
+        <li><strong>Retry with Exponential Backoff</strong>: Smart retry strategies for failed operations</li>
+        <li><strong>Event Sourcing</strong>: Store state changes as a sequence of events</li>
+        <li><strong>CQRS (Command Query Responsibility Segregation)</strong>: Separate read and write models</li>
+        <li><strong>Saga Pattern</strong>: Manage distributed transactions across services</li>
+        <li><strong>Rate Limiting</strong>: Control request rates to protect services</li>
+        <li><strong>Caching Strategies</strong>: Implement caching for performance optimization</li>
+      </ol>
+      
+      <div class="box ok">
+        <span class="box-title">Learning Outcome</span>
+        Understanding idempotency helps in designing reliable APIs and distributed systems where network reliability cannot be guaranteed.
+      </div>
+    </section>
+
     <section class="section" id="summary">
-      <h2>15) Final Summary</h2>
+      <h2>17) Final Summary</h2>
       <p>If we want to describe the entire architecture in a few sentences:</p>
       <ul>
         <li>The frontend displays the user interface.</li>
@@ -818,6 +991,7 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
         <li>The Auth Service is the source of truth for users and tokens.</li>
         <li>Redis is used as the canonical message broadcaster.</li>
         <li>Clients are only updated after changes are saved in the document database.</li>
+        <li>Idempotency ensures reliable operations in distributed environments.</li>
       </ul>
       <div class="box ok">
         <span class="box-title">One very important sentence</span>

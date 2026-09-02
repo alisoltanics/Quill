@@ -17,19 +17,21 @@ This document is written from the ground up in simple language so that a beginne
 
 1. [Project Goal](#1-project-goal)
 2. [System Overview](#2-system-overview)
-3. [Services and Responsibilities](#3-services-and-responsibilities)
-4. [Databases](#4-databases)
-5. [Document Data Model](#5-document-data-model)
-6. [Authentication Flow](#6-authentication-flow)
-7. [Opening a Document Flow](#7-opening-a-document-flow)
-8. [Edit and Sync Flow](#8-edit-and-sync-flow)
-9. [Online Users (Presence)](#9-online-users-presence)
-10. [Remote Cursors](#10-remote-cursors)
-11. [Audit Service and Kafka](#11-audit-service-and-kafka)
-12. [Export Flow](#12-export-flow)
-13. [Monitoring and Observability](#13-monitoring-and-observability)
-14. [Current Limitations](#14-current-limitations)
-15. [Final Summary](#15-final-summary)
+3. [Microservice Principles](#3-microservice-principles-we-follow)
+4. [Services and Responsibilities](#4-services-and-responsibilities)
+5. [Databases](#5-databases)
+6. [Document Data Model](#6-document-data-model)
+7. [Authentication Flow](#7-authentication-flow)
+8. [Opening a Document Flow](#8-opening-a-document-flow)
+9. [Edit and Sync Flow](#9-edit-and-sync-flow)
+10. [Online Users (Presence)](#10-online-users-presence)
+11. [Remote Cursors](#11-remote-cursors)
+12. [Audit Service and Kafka](#12-audit-service-and-kafka)
+13. [Export Flow](#13-export-flow)
+14. [Monitoring and Observability](#14-monitoring-and-observability)
+15. [Current Limitations](#15-current-limitations)
+16. [System Design Concepts for Practice and Learning](#16-system-design-concepts-for-practice-and-learning)
+17. [Final Summary](#17-final-summary)
 
 ---
 
@@ -85,7 +87,22 @@ So an important point is that the frontend does not communicate directly with al
 
 ---
 
-## 3) Services and Responsibilities
+## 3) Microservice Principles We Follow
+
+| Principle | How we applied it |
+|-----------|-------------------|
+| **Single Responsibility** | Each service does one thing: Auth (login), Document (CRUD), Audit (logging), Export (PDF/HTML) |
+| **Decentralized Data** | Each service owns its own database: `postgres-auth`, `postgres`, `audit-postgres` |
+| **API Gateway** | Gateway is the single entry point — handles WebSocket + proxies REST |
+| **Event-Driven** | Document service publishes to Kafka → Audit service consumes asynchronously |
+| **Independent Deployment** | Each service has its own `Dockerfile` |
+| **Observability** | Prometheus metrics, Jaeger tracing, structured logging |
+| **Resilience** | Circuit breaker on downstream calls to prevent cascading failures |
+| **Loose Coupling** | Services communicate only via HTTP, Redis, or Kafka — no shared DB |
+
+---
+
+## 4) Services and Responsibilities
 
 | Service | Port | Main Job |
 |---------|------|----------|
@@ -102,7 +119,7 @@ So an important point is that the frontend does not communicate directly with al
 
 ---
 
-## 4) Databases
+## 5) Databases
 
 In the current state, the authentication service and the document service use two separate databases.
 
@@ -114,7 +131,7 @@ In the current state, the authentication service and the document service use tw
 
 ---
 
-## 5) Document Data Model
+## 6) Document Data Model
 
 Each document has several important fields:
 
@@ -136,7 +153,7 @@ Each time a document is saved, a new version is also recorded in `DocumentVersio
 
 ---
 
-## 6) Authentication Flow
+## 7) Authentication Flow
 
 User login is handled with JWT.
 
@@ -156,7 +173,7 @@ User login is handled with JWT.
 
 ---
 
-## 7) Opening a Document Flow
+## 8) Opening a Document Flow
 
 When a user clicks on a document or refreshes the page with a document URL, the following path is taken:
 
@@ -172,7 +189,7 @@ This means the frontend does not fetch the document directly from the database; 
 
 ---
 
-## 8) Edit and Sync Flow
+## 9) Edit and Sync Flow
 
 This is the most important part of the project architecture.
 
@@ -206,7 +223,7 @@ Because in this architecture, only data that has actually been saved in the data
 
 ---
 
-## 9) Online Users (Presence)
+## 10) Online Users (Presence)
 
 ### Data Structure in Redis
 
@@ -246,7 +263,7 @@ Each member has a TTL of 90 seconds. If a user disconnects (e.g., closes the bro
 
 ---
 
-## 10) Remote Cursors
+## 11) Remote Cursors
 
 Each user can see other users' cursors live in the document. The cursor color is determined based on the user's email, and hovering over the cursor shows the user's email.
 
@@ -274,7 +291,7 @@ User Types → Send cursor-update (30ms debounce) → Gateway Publish Redis → 
 
 ---
 
-## 11) Audit Service and Kafka
+## 12) Audit Service and Kafka
 
 After the Document Service saves changes to PostgreSQL, it publishes an independent event to Kafka.
 
@@ -291,7 +308,7 @@ The Audit Service independently consumes this topic and records each event in th
 
 ---
 
-## 12) Export Flow
+## 13) Export Flow
 
 For exports, the frontend does not go directly to the export-service. Like other APIs, it only calls the Gateway.
 
@@ -308,7 +325,7 @@ The Export Service only handles text conversion. The browser itself downloads th
 
 ---
 
-## 13) Monitoring and Observability
+## 14) Monitoring and Observability
 
 This section is for understanding whether the system is healthy, and if a problem occurs, where to look for the cause.
 
@@ -344,7 +361,7 @@ This section is for understanding whether the system is healthy, and if a proble
 
 ---
 
-## 14) Current Limitations
+## 15) Current Limitations
 
 - Since sync only happens after save, real-time is slightly slower than direct broadcast.
 - In some cases, fallback display depends on `content`.
@@ -352,7 +369,132 @@ This section is for understanding whether the system is healthy, and if a proble
 
 ---
 
-## 15) Final Summary
+## 16) System Design Concepts for Practice and Learning
+
+This section covers key system design concepts implemented in this project for educational purposes. These patterns are essential for building reliable distributed systems.
+
+### 16.1 Idempotency
+
+**What is idempotency?**
+Idempotency means that performing an operation multiple times has the same effect as performing it once. This is crucial in distributed systems where network issues can cause duplicate requests.
+
+**Why is it important?**
+- Prevents duplicate data creation when retries happen
+- Ensures system consistency despite network failures
+- Common in payment systems, API design, and distributed transactions
+
+**How we implemented idempotency:**
+
+1. **Client-side**: The frontend generates a unique idempotency key (UUID) for each folder creation request and sends it in the `Idempotency-Key` header.
+
+2. **Server-side**: The Document Service extracts the key from the request header and uses Django's `get_or_create` with a partial unique constraint on `(user_id, idempotency_key)`.
+
+3. **Database constraint**: A partial unique index ensures that only one folder can exist per user with a given idempotency key (NULL keys are excluded).
+
+**Code flow:**
+```python
+# Frontend: generates unique key per operation
+const key = crypto.randomUUID();
+await authFetch('/folders', {
+  method: 'POST',
+  headers: { 'Idempotency-Key': key },
+  body: JSON.stringify({ name: 'New Folder' })
+});
+
+# Backend: uses get_or_create with the key
+folder, created = Folder.objects.get_or_create(
+    user_id=uid,
+    idempotency_key=key,
+    defaults={"name": name},
+)
+# Returns 201 if created, 200 if replayed
+```
+
+**Key benefits demonstrated:**
+- Prevents duplicate folders from network retries
+- Different users can use the same key (scoped per user)
+- Without key, operations are not idempotent (two creates = two folders)
+- Oversized keys are rejected (max 255 characters)
+
+**Testing idempotency:**
+- First request with key: creates folder (201)
+- Second request with same key: returns same folder (200)
+- Different keys: create separate folders
+- Same key, different user: creates separate folders (user scoping)
+
+### 16.2 Circuit Breaker Pattern (Implemented)
+
+#### The Problem
+
+If the Document Service goes down, the Gateway keeps sending requests to it, wasting time and resources. Clients wait and get errors anyway.
+
+#### The Solution
+
+A circuit breaker acts like an electrical fuse. After seeing enough failures, it **stops sending requests** and immediately returns "service unavailable."
+
+#### Three States
+
+| State | What happens |
+|-------|-------------|
+| **Closed** (normal) | Requests go through. Failures are counted. |
+| **Open** (broken) | Requests blocked immediately. Returns 503. No waiting. |
+| **Half-Open** (testing) | After 10 seconds, one request is allowed through to test if service recovered. |
+
+#### Default Settings
+
+| Setting | Value | What it means |
+|---------|-------|---------------|
+| Fail threshold | 5 | Number of failures before circuit opens |
+| Success threshold | 2 | Number of successes to close circuit again |
+| Open timeout | 10s | How long to wait before testing again |
+
+#### Where It Protects
+
+- `/api/` → Document Service proxy
+- `/api/export` → Export Service proxy
+
+#### Example Scenario
+
+1. Document service starts returning 500 errors
+2. After 5 consecutive failures, the circuit opens
+3. Gateway immediately returns 503 to clients (fast fail, no waiting)
+4. After 10 seconds, the circuit goes half-open and allows one probe
+5. If the probe succeeds (200 OK), the circuit closes and normal flow resumes
+
+#### Prometheus Metrics
+
+```promql
+# State transitions per service
+gateway_circuit_breaker_transitions_total{service="document-service", from="closed", to="open"}
+
+# Requests rejected by circuit breaker
+gateway_circuit_breaker_rejections_total{service="export-service"}
+```
+
+#### Files
+
+- `services/gateway/circuit_breaker.go` — implementation
+- `services/gateway/circuit_breaker_test.go` — 14 unit tests
+
+### 16.3 Other System Design Concepts (Future Practice)
+
+While idempotency and circuit breaker are implemented, other important concepts can be added for further learning:
+
+1. ~~**Circuit Breaker Pattern**~~ ✅ Implemented
+2. **Bulkhead Pattern**: Isolate components to prevent failure propagation  
+3. **Retry with Exponential Backoff**: Smart retry strategies for failed operations
+4. **Event Sourcing**: Store state changes as a sequence of events
+5. **CQRS (Command Query Responsibility Segregation)**: Separate read and write models
+6. **Saga Pattern**: Manage distributed transactions across services
+7. **Rate Limiting**: Control request rates to protect services
+8. **Caching Strategies**: Implement caching for performance optimization
+
+> **✅ Learning Outcome**
+> Understanding idempotency helps in designing reliable APIs and distributed systems where network reliability cannot be guaranteed.
+
+---
+
+## 17) Final Summary
 
 If we want to describe the entire architecture in a few sentences:
 
@@ -362,6 +504,7 @@ If we want to describe the entire architecture in a few sentences:
 - The Auth Service is the source of truth for users and tokens.
 - Redis is used as the canonical message broadcaster.
 - Clients are only updated after changes are saved in the document database.
+- Idempotency ensures reliable operations in distributed environments.
 
 > **✅ One very important sentence**
 > In this architecture, the final version of the document is always determined by the Document Service, not by the client itself.

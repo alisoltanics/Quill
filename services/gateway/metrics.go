@@ -22,9 +22,17 @@ var (
         Name: "gateway_document_service_requests_total",
         Help: "Total requests sent to the document service.",
     })
-    gatewayDocumentServiceLatency = promauto.NewHistogram(prometheus.HistogramOpts{
-        Name:    "gateway_document_service_request_duration_seconds",
-        Help:    "Latency of document service requests in seconds.",
-        Buckets: prometheus.DefBuckets,
-    })
+	gatewayDocumentServiceLatency = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "gateway_document_service_request_duration_seconds",
+		Help:    "Latency of document service requests in seconds.",
+		Buckets: prometheus.DefBuckets,
+	})
+	gatewayCircuitBreakerTransitions = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "gateway_circuit_breaker_transitions_total",
+		Help: "Total circuit breaker state transitions by service.",
+	}, []string{"service", "from", "to"})
+	gatewayCircuitBreakerRejections = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "gateway_circuit_breaker_rejections_total",
+		Help: "Total requests rejected by circuit breaker.",
+	}, []string{"service"})
 )

@@ -122,13 +122,13 @@ cd services/frontend && npx jest --forceExit --detectOpenHandles
 
 | Service | Framework | Tests |
 |---------|-----------|-------|
-| Gateway (Go) | go test | 43 |
+| Gateway (Go) | go test | 57 |
 | Auth Service | pytest | 19 |
 | Audit Service | pytest | 13 |
 | Export Service | pytest | 21 |
 | Document Service | Django | 66 |
 | Frontend | Jest | 15 |
-| **Total** | | **177** |
+| **Total** | | **191** |
 
 ## Common Pitfalls
 
@@ -137,6 +137,13 @@ cd services/frontend && npx jest --forceExit --detectOpenHandles
 - `_JWT_SECRET` in Go is a `string`. Access it via exported `VerifyAccessToken`/`ExtractToken` functions.
 - `hub_test.go` must stay in `services/gateway/` (Go requires test files in same package).
 - `TestServerCORS` in `server_test.go` must use `t.Parallel()` or isolation issues.
+
+### Circuit Breaker
+
+- The gateway wraps reverse proxies with `circuitBreakerHandler` to fail fast when downstream services are down.
+- Circuit state transitions are tracked via `gateway_circuit_breaker_transitions_total` metric.
+- Rejected requests are counted via `gateway_circuit_breaker_rejections_total` metric.
+- Default thresholds: 5 failures to open, 2 successes to close, 10s open timeout.
 
 ### Python Tests (Auth/Audit/Export)
 
@@ -172,7 +179,8 @@ cd services/frontend && npx jest --forceExit --detectOpenHandles
 ├── services/
 │   ├── gateway/                       # Go WebSocket gateway
 │   │   ├── main.go, hub.go, presence.go, config.go, metrics.go, server.go, jwt.go
-│   │   ├── *_test.go                  # 43 Go tests
+│   │   ├── circuit_breaker.go          # Circuit breaker pattern implementation
+│   │   ├── *_test.go                  # 57 Go tests
 │   │   └── Dockerfile (with test target)
 │   ├── frontend/                      # Next.js collaborative editor
 │   │   ├── components/, lib/, contexts/

@@ -415,6 +415,7 @@
           <li><a href="#export-flow">فلو اکسپورت</a></li>
           <li><a href="#monitoring">مانیتورینگ و مشاهده پذیری</a></li>
           <li><a href="#limitations">محدودیت های فعلی</a></li>
+          <li><a href="#system-design-concepts">مفاهیم طراحی سیستم برای تمرین و یادگیری</a></li>
           <li><a href="#summary">خلاصه نهایی</a></li>
         </ol>
       </div>
@@ -483,8 +484,54 @@
       </div>
     </section>
 
+    <section class="section" id="principles">
+      <h2>3) اصول میکروسرویسی که رعایت کردیم</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>اصل</th>
+            <th>نحوه پیاده سازی</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>مسئولیت واحد</strong></td>
+            <td>هر سرویس یک کار انجام می‌دهد: Auth (ورود)، Document (CRUD)، Audit (لاگ)، Export (PDF/HTML)</td>
+          </tr>
+          <tr>
+            <td><strong>داده غیرمتمرکز</strong></td>
+            <td>هر سرویس پایگاه داده خودش را دارد: <code>postgres-auth</code>، <code>postgres</code>، <code>audit-postgres</code></td>
+          </tr>
+          <tr>
+            <td><strong>API Gateway</strong></td>
+            <td>Gateway نقطه ورود واحد است — WebSocket + پروکسی REST</td>
+          </tr>
+          <tr>
+            <td><strong>Event-Driven</strong></td>
+            <td>Document service به Kafka publish می‌کند → Audit service مصرف می‌کند</td>
+          </tr>
+          <tr>
+            <td><strong>استقرار مستقل</strong></td>
+            <td>هر سرویس <code>Dockerfile</code> خودش را دارد</td>
+          </tr>
+          <tr>
+            <td><strong>مشاهده پذیری</strong></td>
+            <td>Prometheus metrics، Jaeger tracing، لاگ‌های ساختاریافته</td>
+          </tr>
+          <tr>
+            <td><strong>Resilience</strong></td>
+            <td>Circuit breaker روی فراخوانی‌های پایین‌دستی برای جلوگیری از شکست آبشاری</td>
+          </tr>
+          <tr>
+            <td><strong>Loose Coupling</strong></td>
+            <td>سرویس‌ها فقط از طریق HTTP، Redis یا Kafka ارتباط برقرار می‌کنند — بدون DB مشترک</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
     <section class="section" id="services">
-      <h2>3) سرویس ها و مسئولیت هرکدام</h2>
+      <h2>4) سرویس ها و مسئولیت هرکدام</h2>
       <table>
         <thead>
           <tr>
@@ -538,7 +585,7 @@
     </section>
 
     <section class="section" id="databases">
-      <h2>4) پایگاه داده ها</h2>
+      <h2>5) پایگاه داده ها</h2>
       <p>در وضعیت فعلی، سرویس احراز هویت و سرویس سند از دو پایگاه داده جدا استفاده می کنند.</p>
       <ul>
         <li><strong>document database</strong>: برای سندها، فولدرها و نسخه های سند</li>
@@ -551,7 +598,7 @@
     </section>
 
     <section class="section" id="document-model">
-      <h2>5) مدل داده سند</h2>
+      <h2>6) مدل داده سند</h2>
       <p>هر سند چند بخش مهم دارد:</p>
       <ul>
         <li><code>title</code>: عنوان سند</li>
@@ -572,7 +619,7 @@
     </section>
 
     <section class="section" id="auth-flow">
-      <h2>6) فلو احراز هویت</h2>
+      <h2>7) فلو احراز هویت</h2>
       <p>ورود کاربر با JWT انجام می شود.</p>
       <ol>
         <li>کاربر در فرانت login یا register می کند.</li>
@@ -593,7 +640,7 @@
     </section>
 
     <section class="section" id="open-doc">
-      <h2>7) فلو باز کردن سند</h2>
+      <h2>8) فلو باز کردن سند</h2>
       <p>وقتی کاربر روی یک سند کلیک می کند یا صفحه را با آدرس یک سند refresh می کند، این مسیر طی می شود:</p>
       <ol>
         <li>فرانت از URL می فهمد کدام سند باید باز شود.</li>
@@ -608,7 +655,7 @@
     </section>
 
     <section class="section" id="edit-flow">
-      <h2>8) فلو ویرایش و همگام سازی</h2>
+      <h2>9) فلو ویرایش و همگام سازی</h2>
       <p>این مهم ترین بخش معماری پروژه است.</p>
       <div class="box warn">
         <span class="box-title">سیاست فعلی سیستم</span>
@@ -650,7 +697,7 @@
     </section>
 
     <section class="section" id="presence">
-      <h2>9) فلو کاربران آنلاین (Presence)</h2>
+      <h2>10) فلو کاربران آنلاین (Presence)</h2>
       <h3>ساختار داده در Redis</h3>
       <p>از یک <strong>Sorted Set</strong> به نام <code>doc:{docId}:online</code> استفاده می شود. هر عضو ایمیل کاربر است و score آن زمان آخرین فعالیت (Unix timestamp) است.</p>
       <pre><code>Redis Key:   doc:42:online
@@ -694,7 +741,7 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
     </section>
 
     <section class="section" id="remote-cursors">
-      <h2>10) نشانگرهای از راه دور (Remote Cursors)</h2>
+      <h2>11) نشانگرهای از راه دور (Remote Cursors)</h2>
       <p>هر کاربر می تواند نشانگر (cursor) کاربران دیگر را به صورت زنده در سند ببیند. رنگ نشانگر بر اساس ایمیل کاربر تعیین می شود و با hover روی نشانگر، ایمیل کاربر نمایش داده می شود.</p>
       <h3>ارسال موقعیت نشانگر</h3>
       <ol>
@@ -730,7 +777,7 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
     </section>
 
     <section class="section" id="audit-flow">
-      <h2>11) سرویس Audit و Kafka</h2>
+      <h2>12) سرویس Audit و Kafka</h2>
       <p>بعد از اینکه Document Service تغییرات را در PostgreSQL ذخیره می کند، یک event مستقل به Kafka منتشر می کند.</p>
       <p>این event به شکل یک پیام <code>document.updated</code> ارسال می شود و شامل شناسه سند، شناسه کاربر، نسخه، timestamp و شناسه کلاینت است.</p>
       <p>سرویس Audit به صورت مستقل این topic را مصرف می کند و هر رویداد ذخیره شده را در جدول <code>audit_activity</code> ثبت می کند.</p>
@@ -746,7 +793,7 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
     </section>
 
     <section class="section" id="export-flow">
-      <h2>12) فلو اکسپورت</h2>
+      <h2>13) فلو اکسپورت</h2>
       <p>فرانت برای اکسپورت هم مستقیم سراغ export-service نمی رود. مثل بقیه APIها فقط Gateway را صدا می زند.</p>
       <ol>
         <li>کاربر در فرانت روی Export کلیک می کند.</li>
@@ -763,7 +810,7 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
     </section>
 
     <section class="section" id="monitoring">
-      <h2>13) مانیتورینگ و مشاهده پذیری</h2>
+      <h2>14) مانیتورینگ و مشاهده پذیری</h2>
       <p>این بخش برای این است که بفهمیم سیستم سالم است یا نه، و اگر مشکلی پیش آمد، از کجا باید دنبال علت بگردیم.</p>
       <h3>ابزارهای اصلی</h3>
       <ul>
@@ -800,7 +847,7 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
     </section>
 
     <section class="section" id="limitations">
-      <h2>14) محدودیت های فعلی</h2>
+      <h2>15) محدودیت های فعلی</h2>
       <ul>
         <li>چون sync فقط بعد از save انجام می شود، realtime کمی کندتر از حالت broadcast مستقیم است.</li>
         <li>در بعضی حالت ها نمایش fallback به <code>content</code> وابسته است.</li>
@@ -808,8 +855,93 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
       </ul>
     </section>
 
+    <section class="section" id="system-design-concepts">
+      <h2>16) مفاهیم طراحی سیستم برای تمرین و یادگیری</h2>
+      <p>این بخش مفاهیم کلیدی طراحی سیستم را پوشش می دهد که در این پروژه برای اهداف آموزشی پیاده سازی شده اند. این الگوها برای ساخت سیستم های توزیع شده قابل اعتماد ضروری هستند.</p>
+      
+      <h3>16.1 Idempotency (ایدامپوتنتسی)</h3>
+      <p><strong>Idempotency چیست؟</strong><br>
+      Idempotency به معنای این است که انجام یک عملیات چندین بار، همان تأثیر را دارد که انجام آن یک بار دارد. این در سیستم های توزیع شده حیاتی است زیرا مشکلات شبکه می تواند باعث درخواست های تکراری شود.</p>
+      
+      <p><strong>چرا مهم است؟</strong></p>
+      <ul>
+        <li>از ایجاد داده تکراری هنگام تلاش مجدد جلوگیری می کند</li>
+        <li>سازگاری سیستم را علی رغم خطاهای شبکه تضمین می کند</li>
+        <li>در سیستم های پرداخت، طراحی API و تراکنش های توزیع شده رایج است</li>
+      </ul>
+      
+      <p><strong>چگونه Idempotency را پیاده سازی کردیم:</strong></p>
+      <ol>
+        <li><strong>سمت کلاینت</strong>: فرانت‌وارد یک کلید idempotency منحصربفرد (UUID) برای هر درخواست ایجاد پوشه تولید می کند و آن را در هدر <code>Idempotency-Key</code> ارسال می کند.</li>
+        <li><strong>سمت سرور</strong>: Document Service کلید را از هدر درخواست استخراج می کند و از <code>get_or_create</code> جنگو با constraint یکتای جزئی روی <code>(user_id, idempotency_key)</code> استفاده می کند.</li>
+        <li><strong>Constraint پایگاه داده</strong>: یک ایندکس یکتای جزئی تضمین می کند که فقط یک پوشه می تواند برای هر کاربر با یک کلید idempotency خاص وجود داشته باشد (کلیدهای NULL مستثنی هستند).</li>
+      </ol>
+      
+      <p><strong>جریان کد:</strong></p>
+      <pre><code># فرانت‌وارد: کلید منحصربفرد برای هر عملیات تولید می کند
+const key = crypto.randomUUID();
+await authFetch('/folders', {
+  method: 'POST',
+  headers: { 'Idempotency-Key': key },
+  body: JSON.stringify({ name: 'New Folder' })
+});
+
+# بک‌اند: از get_or_create با کلید استفاده می کند
+folder, created = Folder.objects.get_or_create(
+    user_id=uid,
+    idempotency_key=key,
+    defaults={"name": name},
+)
+# 201 اگر ایجاد شده باشد، 200 اگر تکراری باشد برمی گرداند</code></pre>
+      
+      <p><strong>مزایای کلیدی نشان داده شده:</strong></p>
+      <ul>
+        <li>از پوشه های تکراری ناشی از تلاش مجدد شبکه جلوگیری می کند</li>
+        <li>کاربران مختلف می توانند از همان کلید استفاده کنند (محدود به کاربر)</li>
+        <li>بدون کلید، عملیات ها ایدامپوتنت نیستند (ایجاد دو بار = دو پوشه)</li>
+        <li>کلیدهای بیش از حد بزرگ رد می شوند (حداکثر 255 کاراکتر)</li>
+      </ul>
+      
+      <p><strong>تست Idempotency:</strong></p>
+      <ul>
+        <li>درخواست اول با کلید: پوشه ایجاد می کند (201)</li>
+        <li>درخواست دوم با همان کلید: همان پوشه را برمی گرداند (200)</li>
+        <li>کلیدهای مختلف: پوشه های جداگانه ایجاد می کنند</li>
+        <li>همان کلید، کاربر متفاوت: پوشه های جداگانه ایجاد می کند (محدود به کاربر)</li>
+      </ul>
+      
+      <h3>16.2 الگوی Circuit Breaker (پیاده سازی شده)</h3>
+      
+      <h4>مشکل</h4>
+      <p>اگر Document Service از کار بیفتد، Gateway همچنان درخواست‌ها را به آن ارسال می‌کند و منابع را هدر می‌دهد.</p>
+      
+      <h4>راه حل</h4>
+      <p>Circuit Breaker مانند یک فیوز عمل می‌کند. پس از دیدن تعداد کافی خطا، <strong>ارسال درخواست‌ها را متوقف می‌کند</strong>.</p>
+      
+      <h4>سه حالت</h4>
+      <table>
+        <tr><th>حالت</th><th>چه اتفاقی می‌افتد</th></tr>
+        <tr><td><strong>Closed</strong> (عادی)</td><td>درخواست‌ها عبور می‌کنند. خطاها شمارش می‌شوند.</td></tr>
+        <tr><td><strong>Open</strong> (خراب)</td><td>درخواست‌ها فوراً مسدود می‌شوند. 503 برمی‌گرداند.</td></tr>
+        <tr><td><strong>Half-Open</strong> (تست)</td><td>پس از 10 ثانیه، یک درخواست اجازه عبور دارد.</td></tr>
+      </table>
+      
+      <h4>فایل‌ها</h4>
+      <ul>
+        <li><code>services/gateway/circuit_breaker.go</code> — پیاده سازی</li>
+        <li><code>services/gateway/circuit_breaker_test.go</code> — 14 تست unit</li>
+      </ul>
+      
+      <p><strong>فایل‌ها:</strong></p>
+      <ul>
+        <li><code>services/gateway/circuit_breaker.go</code> — پیاده سازی</li>
+        <li><code>services/gateway/circuit_breaker_test.go</code> — 14 تست unit</li>
+      </ul>
+
+    </section>
+
     <section class="section" id="summary">
-      <h2>15) خلاصه نهایی</h2>
+      <h2>17) خلاصه نهایی</h2>
       <p>اگر بخواهیم کل معماری را در چند جمله بگوییم:</p>
       <ul>
         <li>فرانت رابط کاربری را نمایش می دهد.</li>
@@ -818,6 +950,7 @@ Scores:      [1693584000000, 1693584005000]</code></pre>
         <li>Auth Service منبع حقیقت برای کاربران و توکن ها است.</li>
         <li>Redis برای پخش پیام canonical استفاده می شود.</li>
         <li>کلاینت ها فقط بعد از ذخیره شدن تغییرات در دیتابیس سند، آپدیت می شوند.</li>
+        <li>Idempotency عملیات های قابل اعتماد در محیط های توزیع شده را تضمین می کند.</li>
       </ul>
       <div class="box ok">
         <span class="box-title">یک جمله خیلی مهم</span>
