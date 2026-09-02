@@ -954,17 +954,26 @@ folder, created = Folder.objects.get_or_create(
 
     <section class="section" id="outbox">
       <h2>16.4) الگوی Outbox (پیاده سازی شده)</h2>
-      <p>سرویس document از الگوی <strong>Transactional Outbox</strong> برای تضمین انتشار قابل اعتماد رویدادها استفاده می‌کند.</p>
       
-      <h4>تضمین</h4>
-      <p><strong>حداقل یک بار ارسال</strong> — هیچ رویدادی از بین نمی‌رود.</p>
+      <h4>چرا پیاده سازی کردیم</h4>
+      <p>وقتی کاربر سند را ویرایش می‌کند، دو اتفاق باید بیفتد: ذخیره سند و اطلاع‌رسانی به سرویس‌های دیگر. مشکل: <strong>اگر اطلاع‌رسانی خطا کند چه؟</strong></p>
+      
+      <h4>چطور کار می‌کند</h4>
+      <p>به جای انتشار مستقیم، <strong>رویداد را در یک جدول در همان تراکنش دیتابیس</strong> ذخیره می‌کنیم. سپس یک worker پس‌زمینه آن را می‌خواند و منتشر می‌کند.</p>
+      
+      <h4>اگر Kafka/Redis خطا کند</h4>
+      <p>رویداد در جدول outbox با <code>published = false</code> باقی می‌ماند. worker در نوبت بعدی دوباره تلاش می‌کند. <strong>هیچ رویدادی از بین نمی‌رود.</strong></p>
       
       <h4>فایل‌ها</h4>
       <ul>
         <li><code>api/models.py</code> — مدل OutboxMessage</li>
-        <li><code>api/commands.py</code> — نوشتن رویدادها در outbox</li>
+        <li><code>api/commands.py</code> — نوشتن رویدادها در outbox در تراکنش</li>
         <li><code>api/outbox.py</code> — processor پس‌زمینه</li>
+        <li><code>api/management/commands/run_outbox_processor.py</code> — دستور management</li>
       </ul>
+      
+      <h4>تضمین</h4>
+      <p><strong>حداقل یک بار ارسال</strong> — هیچ رویدادی از بین نمی‌رود.</p>
     </section>
 
     <section class="section" id="summary">

@@ -555,62 +555,124 @@ def patch(self, request, pk):
 
 ### 16.4 Outbox Pattern (Implemented)
 
-The document service uses the **Transactional Outbox** pattern to guarantee reliable event publishing.
+#### Why we implemented it
 
-#### The Problem
+When a user edits a document, two things must happen:
+1. Save the document to the database
+2. Notify other services (Redis for real-time sync, Kafka for audit logging)
 
-Previously, when a document was saved:
-1. Write to database
-2. Publish to Redis (try/except — swallow error)
-3. Publish to Kafka (try/except — swallow error)
+The problem: **what if step 2 fails?** The document is saved, but other services never find out. The database and message broker go out of sync.
 
-If step 2 or 3 fails, the event is lost. The database and message broker go out of sync.
-
-#### The Solution
-
-Write events to an `OutboxMessage` table **in the same database transaction** as the business data. A background processor reads from the outbox and publishes to Kafka/Redis.
-
+Before the outbox pattern:
 ```
-Before (unreliable):           After (reliable):
-┌──────────────┐              ┌──────────────┐
-│ Save doc     │              │ Save doc     │
-│ Publish Redis│ ← can fail   │ Write outbox │ ← same transaction
-│ Publish Kafka│ ← can fail   └──────────────┘
-└──────────────┘                     │
-                              Background worker
-                                     │
-                              ┌──────┴──────┐
-                              ▼             ▼
-                         Publish Redis  Publish Kafka
-                         (retry safe)   (retry safe)
+Save doc     → OK
+Publish Redis → FAILS (network error)
+Publish Kafka → FAILS (Kafka down)
+
+Result: Document saved, but no one knows about it
 ```
 
 #### How it works
 
-| Step | What happens |
+Instead of publishing directly, we **write the event to a table in the same database transaction** as the document save. A background worker then reads and publishes.
+
+```
+Step 1: Save document + write event to outbox (same transaction)
+┌─────────────────────────────────────────┐
+│ BEGIN TRANSACTION                       │
+│   INSERT INTO documents (...)           │  ← save document
+│   INSERT INTO outbox_messages (...)     │  ← save event
+│ COMMIT                                  │  ← both succeed or both fail
+└─────────────────────────────────────────┘
+
+Step 2: Background worker polls outbox every 5 seconds
+┌─────────────────────────────────────────┐
+│ SELECT * FROM outbox_messages           │
+│ WHERE published = false                 │
+└─────────────────────────────────────────┘
+
+Step 3: Worker publishes to Kafka/Redis, then marks as published
+┌─────────────────────────────────────────┐
+│ UPDATE outbox_messages                  │
+│ SET published = true                    │
+│ WHERE id = ...                          │
+└─────────────────────────────────────────┘
+```
+
+#### What happens if Kafka/Redis is down
+
+The event stays in the outbox table with `published = false`. The worker retries on the next poll. **No events are ever lost.**
+
+```
+Save doc + outbox  → OK
+Worker tries Kafka → FAILS (Kafka down)
+Worker tries again → FAILS
+Worker tries again → OK (Kafka recovered)
+Mark published     → done
+```
+
+#### How it's implemented
+
+| File | What it does |
 |------|-------------|
-| 1 | Command saves document + writes event to outbox — **same atomic transaction** |
-| 2 | Background processor polls outbox for unpublished events |
-| 3 | Processor publishes to Kafka and Redis |
-| 4 | Processor marks event as published |
+| `api/models.py` | `OutboxMessage` model — stores events |
+| `api/commands.py` | Writes events to outbox in same transaction as doc save |
+| `api/outbox.py` | Background processor — polls outbox, publishes to Kafka/Redis |
+| `api/management/commands/run_outbox_processor.py` | Django command to start the worker |
+
+**OutboxMessage model:**
+```python
+class OutboxMessage(models.Model):
+    aggregate_type = models.CharField(max_length=64)  # "document"
+    aggregate_id = models.IntegerField()              # document.pk
+    event_type = models.CharField(max_length=64)      # "document.updated"
+    payload = models.JSONField()                      # event data
+    published = models.BooleanField(default=False)    # retry until true
+    created_at = models.DateTimeField(auto_now_add=True)
+```
+
+**Command writes to outbox:**
+```python
+def update_document(doc, *, content=UNSET, ...):
+    with transaction.atomic():
+        doc.save()
+        version = DocumentVersion.objects.create(...)
+        # Write event to outbox in same transaction
+        OutboxMessage.objects.create(
+            aggregate_type="document",
+            aggregate_id=doc.pk,
+            event_type="document.updated",
+            payload={"document_id": doc.pk, "version": version.pk},
+        )
+```
+
+**Worker publishes:**
+```python
+def process_outbox(batch_size=10):
+    messages = OutboxMessage.objects.filter(published=False)[:batch_size]
+    for msg in messages:
+        _publish_to_kafka(topic, payload)   # retry safe
+        _publish_to_redis(payload)           # retry safe
+        msg.published = True
+        msg.save(update_fields=["published"])
+```
+
+#### Running the worker
+
+The outbox processor starts automatically with the document-service. To run manually:
+
+```bash
+python manage.py run_outbox_processor --interval 5 --batch-size 10
+```
+
+| Flag | Default | What it does |
+|------|---------|-------------|
+| `--interval` | 5 | Seconds between polls |
+| `--batch-size` | 10 | Max events per batch |
 
 #### Guarantee
 
-**At-least-once delivery** — no events are lost, even if Kafka/Redis is temporarily unavailable. Events are retried until successfully published.
-
-#### Files
-
-- `api/models.py` — `OutboxMessage` model
-- `api/commands.py` — writes events to outbox in transaction
-- `api/outbox.py` — background processor (polls and publishes)
-- `api/management/commands/run_outbox_processor.py` — Django management command
-
-#### Usage
-
-```bash
-# Start the outbox processor
-python manage.py run_outbox_processor --interval 5 --batch-size 10
-```
+**At-least-once delivery** — events are retried until successfully published. No events are lost, even if Kafka or Redis is temporarily unavailable.
 
 ### 16.5 Other System Design Concepts (Future Practice)
 

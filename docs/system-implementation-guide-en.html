@@ -993,24 +993,26 @@ gateway_circuit_breaker_rejections_total{service="export-service"}</code></pre>
       </ul>
 
       <h3>16.4 Outbox Pattern (Implemented)</h3>
-      <p>The document service uses the <strong>Transactional Outbox</strong> pattern to guarantee reliable event publishing.</p>
       
-      <h4>The Problem</h4>
-      <p>Previously, if Redis/Kafka failed after saving a document, the event was lost. Database and message broker go out of sync.</p>
+      <h4>Why we implemented it</h4>
+      <p>When a user edits a document, two things must happen: save the document and notify other services. The problem: <strong>what if the notification fails?</strong> The document is saved, but other services never find out.</p>
       
-      <h4>The Solution</h4>
-      <p>Write events to an <code>OutboxMessage</code> table <strong>in the same database transaction</strong> as the business data. A background processor reads from the outbox and publishes.</p>
+      <h4>How it works</h4>
+      <p>Instead of publishing directly, we <strong>write the event to a table in the same database transaction</strong> as the document save. A background worker then reads and publishes.</p>
       
-      <h4>Guarantee</h4>
-      <p><strong>At-least-once delivery</strong> — no events are lost, even if Kafka/Redis is temporarily unavailable.</p>
+      <h4>What happens if Kafka/Redis is down</h4>
+      <p>The event stays in the outbox table with <code>published = false</code>. The worker retries on the next poll. <strong>No events are ever lost.</strong></p>
       
-      <h4>Files</h4>
+      <h4>How it's implemented</h4>
       <ul>
         <li><code>api/models.py</code> — OutboxMessage model</li>
         <li><code>api/commands.py</code> — writes events to outbox in transaction</li>
         <li><code>api/outbox.py</code> — background processor</li>
         <li><code>api/management/commands/run_outbox_processor.py</code> — management command</li>
       </ul>
+      
+      <h4>Guarantee</h4>
+      <p><strong>At-least-once delivery</strong> — no events are lost.</p>
 
       <h3>16.5 Other System Design Concepts (Future Practice)</h3>
       <p>While idempotency, circuit breaker, and CQRS are implemented, other important concepts can be added for further learning:</p>
