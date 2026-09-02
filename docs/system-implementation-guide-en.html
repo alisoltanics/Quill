@@ -1000,8 +1000,11 @@ gateway_circuit_breaker_rejections_total{service="export-service"}</code></pre>
       <h4>How it works</h4>
       <p>Instead of publishing directly, we <strong>write the event to a table in the same database transaction</strong> as the document save. A background worker then reads and publishes.</p>
       
-      <h4>What happens if Kafka/Redis is down</h4>
-      <p>The event stays in the outbox table with <code>published = false</code>. The worker retries on the next poll. <strong>No events are ever lost.</strong></p>
+      <h4>What happens if Redis fails</h4>
+      <p>Redis publish happens after the transaction commits. If it fails, the event is lost (same as before).</p>
+      
+      <h4>What happens if Kafka fails</h4>
+      <p>The event stays in the outbox table with <code>published = false</code>. The worker retries on the next poll. <strong>No Kafka events are ever lost.</strong></p>
       
       <h4>How it's implemented</h4>
       <ul>

@@ -599,9 +599,13 @@ Step 3: Worker publishes to Kafka/Redis, then marks as published
 └─────────────────────────────────────────┘
 ```
 
-#### What happens if Kafka/Redis is down
+#### What happens if Redis fails
 
-The event stays in the outbox table with `published = false`. The worker retries on the next poll. **No events are ever lost.**
+Redis publish happens after the transaction commits. If it fails, the event is lost (same as before).
+
+#### What happens if Kafka fails
+
+The event stays in the outbox table with `published = false`. The worker retries on the next poll. **No Kafka events are ever lost.**
 
 ```
 Save doc + outbox  → OK
