@@ -28,4 +28,8 @@ fi
 
 echo "Running migrations and starting server"
 python manage.py migrate --noinput || true
+
+# Start outbox processor in background
+python manage.py run_outbox_processor --interval 5 --batch-size 10 &
+
 exec python manage.py runserver 0.0.0.0:8000
