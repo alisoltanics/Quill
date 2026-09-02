@@ -474,6 +474,29 @@ Circuit Breaker مانند یک فیوز عمل می‌کند. پس از دید�
 - `services/document_service/api/queries.py` — تمام عملیات خواندن
 - `services/document_service/api/views.py` — لایه HTTP که به commands/queries واگذار می‌کند
 
+### 16.4 الگوی Outbox (پیاده سازی شده)
+
+سرویس document از الگوی **Transactional Outbox** برای تضمین انتشار قابل اعتماد رویدادها استفاده می‌کند.
+
+#### مشکل
+
+قبلاً اگر Redis/Kafka بعد از ذخیره سند خطا می‌داد، رویداد از بین می‌رفت.
+
+#### راه حل
+
+نوشتن رویدادها در جدول `OutboxMessage` **در همان تراکنش دیتابیس** به عنوان داده‌های کسب‌وکار. یک worker پس‌زمینه از outbox می‌خواند و منتشر می‌کند.
+
+#### تضمین
+
+**حداقل یک بار ارسال** — هیچ رویدادی از بین نمی‌رود، حتی اگر Kafka/Redis موقتاً در دسترس نباشد.
+
+#### فایل‌ها
+
+- `api/models.py` — مدل OutboxMessage
+- `api/commands.py` — نوشتن رویدادها در outbox در تراکنش
+- `api/outbox.py` — processor پس‌زمینه
+- `api/management/commands/run_outbox_processor.py` — دستور management
+
 ---
 
 ## 17) خلاصه نهایی

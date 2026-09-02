@@ -992,7 +992,27 @@ gateway_circuit_breaker_rejections_total{service="export-service"}</code></pre>
         <li><code>services/document_service/api/views.py</code> — HTTP layer that delegates to commands/queries</li>
       </ul>
 
-      <h3>16.4 Other System Design Concepts (Future Practice)</h3>
+      <h3>16.4 Outbox Pattern (Implemented)</h3>
+      <p>The document service uses the <strong>Transactional Outbox</strong> pattern to guarantee reliable event publishing.</p>
+      
+      <h4>The Problem</h4>
+      <p>Previously, if Redis/Kafka failed after saving a document, the event was lost. Database and message broker go out of sync.</p>
+      
+      <h4>The Solution</h4>
+      <p>Write events to an <code>OutboxMessage</code> table <strong>in the same database transaction</strong> as the business data. A background processor reads from the outbox and publishes.</p>
+      
+      <h4>Guarantee</h4>
+      <p><strong>At-least-once delivery</strong> — no events are lost, even if Kafka/Redis is temporarily unavailable.</p>
+      
+      <h4>Files</h4>
+      <ul>
+        <li><code>api/models.py</code> — OutboxMessage model</li>
+        <li><code>api/commands.py</code> — writes events to outbox in transaction</li>
+        <li><code>api/outbox.py</code> — background processor</li>
+        <li><code>api/management/commands/run_outbox_processor.py</code> — management command</li>
+      </ul>
+
+      <h3>16.5 Other System Design Concepts (Future Practice)</h3>
       <p>While idempotency, circuit breaker, and CQRS are implemented, other important concepts can be added for further learning:</p>
       <ol>
         <li><del><strong>Circuit Breaker Pattern</strong></del> <span style="color: var(--ok);">&#10003; Implemented</span></li>
@@ -1003,6 +1023,7 @@ gateway_circuit_breaker_rejections_total{service="export-service"}</code></pre>
         <li><strong>Saga Pattern</strong>: Manage distributed transactions across services</li>
         <li><strong>Rate Limiting</strong>: Control request rates to protect services</li>
         <li><strong>Caching Strategies</strong>: Implement caching for performance optimization</li>
+        <li><del><strong>Transactional Outbox</strong></del> <span style="color: var(--ok);">&#10003; Implemented</span></li>
       </ol>
       
       <div class="box ok">

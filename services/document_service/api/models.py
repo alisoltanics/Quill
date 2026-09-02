@@ -84,3 +84,24 @@ class DocumentPermission(models.Model):
 
     def __str__(self):
         return f'Permission {self.pk}: {self.user_email} -> doc {self.document_id} ({self.role})'
+
+
+class OutboxMessage(models.Model):
+    """Transactional outbox for reliable event publishing.
+
+    Events are written here in the same DB transaction as the business data.
+    A background processor reads unpublished events and publishes them to
+    Kafka/Redis, then marks them as published.
+    """
+    aggregate_type = models.CharField(max_length=64)  # e.g. "document"
+    aggregate_id = models.IntegerField()              # e.g. document.pk
+    event_type = models.CharField(max_length=64)      # e.g. "document.updated"
+    payload = models.JSONField()
+    published = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f'Outbox {self.pk}: {self.event_type} ({self.aggregate_type}/{self.aggregate_id})'

@@ -553,7 +553,66 @@ def patch(self, request, pk):
     return JsonResponse(DocumentSerializer(doc).data)
 ```
 
-### 16.4 Other System Design Concepts (Future Practice)
+### 16.4 Outbox Pattern (Implemented)
+
+The document service uses the **Transactional Outbox** pattern to guarantee reliable event publishing.
+
+#### The Problem
+
+Previously, when a document was saved:
+1. Write to database
+2. Publish to Redis (try/except — swallow error)
+3. Publish to Kafka (try/except — swallow error)
+
+If step 2 or 3 fails, the event is lost. The database and message broker go out of sync.
+
+#### The Solution
+
+Write events to an `OutboxMessage` table **in the same database transaction** as the business data. A background processor reads from the outbox and publishes to Kafka/Redis.
+
+```
+Before (unreliable):           After (reliable):
+┌──────────────┐              ┌──────────────┐
+│ Save doc     │              │ Save doc     │
+│ Publish Redis│ ← can fail   │ Write outbox │ ← same transaction
+│ Publish Kafka│ ← can fail   └──────────────┘
+└──────────────┘                     │
+                              Background worker
+                                     │
+                              ┌──────┴──────┐
+                              ▼             ▼
+                         Publish Redis  Publish Kafka
+                         (retry safe)   (retry safe)
+```
+
+#### How it works
+
+| Step | What happens |
+|------|-------------|
+| 1 | Command saves document + writes event to outbox — **same atomic transaction** |
+| 2 | Background processor polls outbox for unpublished events |
+| 3 | Processor publishes to Kafka and Redis |
+| 4 | Processor marks event as published |
+
+#### Guarantee
+
+**At-least-once delivery** — no events are lost, even if Kafka/Redis is temporarily unavailable. Events are retried until successfully published.
+
+#### Files
+
+- `api/models.py` — `OutboxMessage` model
+- `api/commands.py` — writes events to outbox in transaction
+- `api/outbox.py` — background processor (polls and publishes)
+- `api/management/commands/run_outbox_processor.py` — Django management command
+
+#### Usage
+
+```bash
+# Start the outbox processor
+python manage.py run_outbox_processor --interval 5 --batch-size 10
+```
+
+### 16.5 Other System Design Concepts (Future Practice)
 
 While idempotency and circuit breaker are implemented, other important concepts can be added for further learning:
 
@@ -565,6 +624,7 @@ While idempotency and circuit breaker are implemented, other important concepts 
 6. **Saga Pattern**: Manage distributed transactions across services
 7. **Rate Limiting**: Control request rates to protect services
 8. **Caching Strategies**: Implement caching for performance optimization
+9. ~~**Transactional Outbox**~~ ✅ Implemented
 
 > **✅ Learning Outcome**
 > Understanding idempotency helps in designing reliable APIs and distributed systems where network reliability cannot be guaranteed.

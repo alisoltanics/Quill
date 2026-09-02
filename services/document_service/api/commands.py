@@ -5,86 +5,34 @@ responsible for:
 - Validating input
 - Persisting changes to the write database
 - Creating version snapshots
-- Publishing side effects (Redis, Kafka)
+- Writing events to the outbox (for reliable async publishing)
 
 Commands return the affected model instance (or None on failure).
 """
 
+import json
 import logging
 from datetime import datetime
 
-import redis
-from kafka import KafkaProducer
+from django.db import transaction
 
-from .models import Document, DocumentPermission, DocumentVersion, Folder
+from .models import Document, DocumentPermission, DocumentVersion, Folder, OutboxMessage
 
 logger = logging.getLogger(__name__)
 
 # Sentinel shared between commands and views
 UNSET = object()
 
-_kafka_producer = None
-
-
-def _get_kafka_producer():
-    global _kafka_producer
-    if _kafka_producer is not None:
-        return _kafka_producer
-    import os
-    addr = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
-    if not addr:
-        return None
-    try:
-        _kafka_producer = KafkaProducer(
-            bootstrap_servers=[addr],
-            value_serializer=lambda value: __import__("json").dumps(value).encode("utf-8"),
-        )
-        return _kafka_producer
-    except Exception:
-        logger.exception("Failed to create Kafka producer")
-        return None
-
-
-def _publish_redis(doc: Document):
-    import os
-    if not doc.yjs_state:
-        return
-    addr = os.environ.get("REDIS_ADDR")
-    if not addr:
-        return
-    try:
-        r = redis.Redis.from_url(f"redis://{addr}")
-        r.publish(
-            "gateway:events",
-            __import__("json").dumps({
-                "type": "sync-state",
-                "docId": doc.pk,
-                "clientId": "document-service",
-                "update": doc.yjs_state,
-            }),
-        )
-    except redis.RedisError:
-        logger.warning("Redis publish failed", exc_info=True)
-
-
-def _publish_kafka(doc: Document, user_id: int, client_id: str | None, version: int, action: str = "updated"):
-    producer = _get_kafka_producer()
-    if producer is None:
-        return
-    payload = {
-        "event": "document.updated",
-        "document_id": doc.pk,
-        "user_id": user_id,
-        "version": version,
-        "timestamp": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
-        "client_id": client_id or "",
-        "action": action,
-    }
-    try:
-        producer.send("document.events", payload)
-        producer.flush(timeout=5)
-    except Exception:
-        logger.exception("Failed to publish Kafka event")
+def _write_outbox(aggregate_type: str, aggregate_id: int, event_type: str, payload: dict):
+    """Write an event to the outbox table. Called within the same transaction
+    as the business data write, ensuring atomicity.
+    """
+    OutboxMessage.objects.create(
+        aggregate_type=aggregate_type,
+        aggregate_id=aggregate_id,
+        event_type=event_type,
+        payload=payload,
+    )
 
 
 # ─── Folder Commands ────────────────────────────────────────────────────────
@@ -173,15 +121,27 @@ def update_document(
         doc.yjs_state = str(yjs_state)
 
     if has_content or has_yjs:
-        doc.save()
-        version = DocumentVersion.objects.create(
-            document=doc,
-            content=doc.content,
-            yjs_state=doc.yjs_state,
-            client_id=client_id,
-        )
-        _publish_redis(doc)
-        _publish_kafka(doc, user_id or doc.user_id, client_id, version.pk)
+        with transaction.atomic():
+            doc.save()
+            version = DocumentVersion.objects.create(
+                document=doc,
+                content=doc.content,
+                yjs_state=doc.yjs_state,
+                client_id=client_id,
+            )
+            # Write event to outbox in the same transaction
+            _write_outbox(
+                aggregate_type="document",
+                aggregate_id=doc.pk,
+                event_type="document.updated",
+                payload={
+                    "document_id": doc.pk,
+                    "user_id": user_id or doc.user_id,
+                    "version": version.pk,
+                    "client_id": client_id or "",
+                    "action": "updated",
+                },
+            )
     else:
         doc.save()
 

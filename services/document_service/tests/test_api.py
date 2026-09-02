@@ -6,7 +6,7 @@ import jwt
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from api.models import Document, DocumentPermission, DocumentVersion, Folder
+from api.models import Document, DocumentPermission, DocumentVersion, Folder, OutboxMessage
 
 JWT_SECRET = "test-secret"
 MODULE = "api.views"
@@ -397,17 +397,21 @@ class DocumentDetailTest(TestCase):
         resp = self.client.patch(f"/documents/{self.doc.pk}", {}, format="json")
         self.assertEqual(resp.status_code, 200)
 
-    @patch("api.commands._publish_redis")
-    @patch("api.commands._publish_kafka")
     @patch(f"{MODULE}._JWT_SECRET", JWT_SECRET)
-    def test_patch_content_publishes(self, mock_kafka, mock_redis):
+    def test_patch_content_publishes_to_outbox(self):
         self.client.patch(
             f"/documents/{self.doc.pk}",
             {"yjs_state": "sync"},
             format="json",
         )
-        mock_redis.assert_called_once()
-        mock_kafka.assert_called_once()
+        # Event should be written to outbox (not directly published)
+        outbox = OutboxMessage.objects.filter(
+            aggregate_type="document",
+            aggregate_id=self.doc.pk,
+            event_type="document.updated",
+        )
+        self.assertEqual(outbox.count(), 1)
+        self.assertFalse(outbox.first().published)
 
 
 # ─── Sharing ─────────────────────────────────────────────────────────────────

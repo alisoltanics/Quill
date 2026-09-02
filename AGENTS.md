@@ -151,6 +151,13 @@ cd services/frontend && npx jest --forceExit --detectOpenHandles
 - `UNSET` sentinel in `commands.py` distinguishes "not provided" from `None`.
 - Views are thin HTTP layer that delegates to commands/queries.
 
+### Transactional Outbox
+
+- Document service uses outbox pattern for reliable event publishing.
+- Events are written to `OutboxMessage` table in the same transaction as business data.
+- Background processor (`outbox.py`) polls and publishes to Kafka/Redis.
+- Run with: `python manage.py run_outbox_processor`
+
 ### Python Tests (Auth/Audit/Export)
 
 - `_JWT_SECRET` is read at module import time. `override_settings` won't work. Use `@patch(f"{MODULE}._JWT_SECRET", JWT_SECRET)`.
