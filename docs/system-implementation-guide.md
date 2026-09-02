@@ -476,7 +476,84 @@ gateway_circuit_breaker_rejections_total{service="export-service"}
 - `services/gateway/circuit_breaker.go` — implementation
 - `services/gateway/circuit_breaker_test.go` — 14 unit tests
 
-### 16.3 Other System Design Concepts (Future Practice)
+### 16.3 CQRS (Implemented)
+
+The document service uses **CQRS** — separating read and write operations into different modules.
+
+#### The Problem
+
+In a monolithic view, one function handles both reads and writes. This mixes concerns and makes it harder to scale reads independently.
+
+#### The Solution
+
+Split the document service into:
+- **Commands** (`commands.py`) — write operations (create, update, delete)
+- **Queries** (`queries.py`) — read operations (list, get, check access)
+
+```
+Commands (writes)                Queries (reads)
+┌──────────────────┐            ┌──────────────────┐
+│ create_folder()  │            │ list_folders()   │
+│ update_folder()  │            │ get_folder()     │
+│ delete_folder()  │            │ list_documents() │
+│ create_document()│            │ get_document()   │
+│ update_document()│            │ has_access()     │
+│ delete_document()│            │ list_permissions()│
+│ share_document() │            │ list_shared()    │
+│ update_permission│            │ count_owners()   │
+│ delete_permission│            └──────────────────┘
+└──────────────────┘
+         │                          │
+         ▼                          ▼
+   Write DB (postgres)        Read DB (same DB now,
+                              can be replica later)
+```
+
+#### Benefits
+
+| Benefit | Explanation |
+|---------|-------------|
+| **Read scaling** | Queries can hit read replicas without affecting writes |
+| **Write optimization** | Commands focus on consistency, not read performance |
+| **Clear boundaries** | Each module has a single responsibility |
+| **Testability** | Commands and queries can be tested independently |
+| **Future flexibility** | Easy to swap read DB for a cache or Elasticsearch |
+
+#### Files
+
+- `services/document_service/api/commands.py` — all write operations
+- `services/document_service/api/queries.py` — all read operations
+- `services/document_service/api/views.py` — HTTP layer that delegates to commands/queries
+
+#### Example
+
+Before CQRS (mixed):
+```python
+# One view does everything
+def get(self, request, pk):
+    doc = Document.objects.get(pk=pk)
+    return JsonResponse(DocumentSerializer(doc).data)
+
+def patch(self, request, pk):
+    doc = Document.objects.get(pk=pk)
+    doc.title = request.data["title"]
+    doc.save()
+    return JsonResponse(DocumentSerializer(doc).data)
+```
+
+After CQRS (separated):
+```python
+# views.py — thin HTTP layer
+def get(self, request, pk):
+    doc = queries.can_access_document(pk, _uid(request), _user_email(request))
+    return JsonResponse(DocumentDetailSerializer(doc).data)
+
+def patch(self, request, pk):
+    doc = commands.update_document(doc, title=data["title"], user_id=uid)
+    return JsonResponse(DocumentSerializer(doc).data)
+```
+
+### 16.4 Other System Design Concepts (Future Practice)
 
 While idempotency and circuit breaker are implemented, other important concepts can be added for further learning:
 
@@ -484,7 +561,7 @@ While idempotency and circuit breaker are implemented, other important concepts 
 2. **Bulkhead Pattern**: Isolate components to prevent failure propagation  
 3. **Retry with Exponential Backoff**: Smart retry strategies for failed operations
 4. **Event Sourcing**: Store state changes as a sequence of events
-5. **CQRS (Command Query Responsibility Segregation)**: Separate read and write models
+5. ~~**CQRS (Command Query Responsibility Segregation)**~~ ✅ Implemented
 6. **Saga Pattern**: Manage distributed transactions across services
 7. **Rate Limiting**: Control request rates to protect services
 8. **Caching Strategies**: Implement caching for performance optimization

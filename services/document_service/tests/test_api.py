@@ -73,6 +73,63 @@ class FolderListTest(TestCase):
         self.assertEqual(resp.json()["name"], "Designs")
 
     @patch(f"{MODULE}._JWT_SECRET", JWT_SECRET)
+    def test_create_folder_with_idempotency_key_replays(self):
+        # First request creates; replay with the same key returns the same folder.
+        first = self.client.post(
+            "/folders", {"name": "Designs"}, format="json",
+            HTTP_IDEMPOTENCY_KEY="op-123",
+        )
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(first.json()["name"], "Designs")
+
+        second = self.client.post(
+            "/folders", {"name": "Designs"}, format="json",
+            HTTP_IDEMPOTENCY_KEY="op-123",
+        )
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json()["id"], first.json()["id"])
+        self.assertEqual(Folder.objects.count(), 1)
+
+    @patch(f"{MODULE}._JWT_SECRET", JWT_SECRET)
+    def test_create_folder_different_keys_create_separate_folders(self):
+        self.client.post(
+            "/folders", {"name": "A"}, format="json", HTTP_IDEMPOTENCY_KEY="op-1"
+        )
+        self.client.post(
+            "/folders", {"name": "B"}, format="json", HTTP_IDEMPOTENCY_KEY="op-2"
+        )
+        self.assertEqual(Folder.objects.count(), 2)
+
+    @patch(f"{MODULE}._JWT_SECRET", JWT_SECRET)
+    def test_idempotency_key_is_scoped_to_user(self):
+        self.client.post(
+            "/folders", {"name": "Mine"}, format="json", HTTP_IDEMPOTENCY_KEY="op-123"
+        )
+        # A different user reusing the same key gets their own folder.
+        _auth(self.client, 200)
+        resp = self.client.post(
+            "/folders", {"name": "Yours"}, format="json", HTTP_IDEMPOTENCY_KEY="op-123"
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.json()["name"], "Yours")
+        self.assertEqual(Folder.objects.count(), 2)
+
+    @patch(f"{MODULE}._JWT_SECRET", JWT_SECRET)
+    def test_create_folder_without_key_is_not_idempotent(self):
+        self.client.post("/folders", {"name": "Designs"}, format="json")
+        self.client.post("/folders", {"name": "Designs"}, format="json")
+        self.assertEqual(Folder.objects.count(), 2)
+
+    @patch(f"{MODULE}._JWT_SECRET", JWT_SECRET)
+    def test_create_folder_rejects_oversized_idempotency_key(self):
+        resp = self.client.post(
+            "/folders", {"name": "Designs"}, format="json",
+            HTTP_IDEMPOTENCY_KEY="k" * 256,
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(Folder.objects.count(), 0)
+
+    @patch(f"{MODULE}._JWT_SECRET", JWT_SECRET)
     def test_unauthenticated_list(self):
         client = APIClient()
         resp = client.get("/folders")
@@ -340,8 +397,8 @@ class DocumentDetailTest(TestCase):
         resp = self.client.patch(f"/documents/{self.doc.pk}", {}, format="json")
         self.assertEqual(resp.status_code, 200)
 
-    @patch(f"{MODULE}._publish")
-    @patch(f"{MODULE}._publish_kafka")
+    @patch("api.commands._publish_redis")
+    @patch("api.commands._publish_kafka")
     @patch(f"{MODULE}._JWT_SECRET", JWT_SECRET)
     def test_patch_content_publishes(self, mock_kafka, mock_redis):
         self.client.patch(

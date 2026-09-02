@@ -126,9 +126,9 @@ cd services/frontend && npx jest --forceExit --detectOpenHandles
 | Auth Service | pytest | 19 |
 | Audit Service | pytest | 13 |
 | Export Service | pytest | 21 |
-| Document Service | Django | 66 |
+| Document Service | Django | 71 |
 | Frontend | Jest | 15 |
-| **Total** | | **191** |
+| **Total** | | **196** |
 
 ## Common Pitfalls
 
@@ -144,6 +144,12 @@ cd services/frontend && npx jest --forceExit --detectOpenHandles
 - Circuit state transitions are tracked via `gateway_circuit_breaker_transitions_total` metric.
 - Rejected requests are counted via `gateway_circuit_breaker_rejections_total` metric.
 - Default thresholds: 5 failures to open, 2 successes to close, 10s open timeout.
+
+### CQRS
+
+- Document service uses CQRS: `commands.py` for writes, `queries.py` for reads.
+- `UNSET` sentinel in `commands.py` distinguishes "not provided" from `None`.
+- Views are thin HTTP layer that delegates to commands/queries.
 
 ### Python Tests (Auth/Audit/Export)
 
@@ -188,7 +194,8 @@ cd services/frontend && npx jest --forceExit --detectOpenHandles
 │   │   └── jest.config.js
 │   ├── document_service/              # Django document CRUD + CRDT
 │   │   ├── api/views.py, serializers.py, urls.py
-│   │   └── tests/test_api.py          # 66 Django tests
+│   │   ├── api/commands.py, queries.py # CQRS: write/read separation
+│   │   └── tests/test_api.py          # 71 Django tests
 │   ├── auth_service/                  # Django JWT auth
 │   │   ├── app/main.py
 │   │   └── tests/test_auth.py         # 19 pytest tests

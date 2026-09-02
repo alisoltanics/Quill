@@ -454,6 +454,26 @@ Circuit Breaker مانند یک فیوز عمل می‌کند. پس از دید�
 - `/api/` → پروکسی Document Service
 - `/api/export` → پروکسی Export Service
 
+### 16.3 CQRS (پیاده سازی شده)
+
+سرویس document از **CQRS** استفاده می‌کند — جداسازی عملیات خواندن و نوشتن در ماژول‌های جداگانه.
+
+#### مشکل
+
+در یک view مونولیتی، یک تابع هم خواندن و هم نوشتن را انجام می‌دهد.
+
+#### راه حل
+
+سرویس document را به دو بخش تقسیم کردیم:
+- **Commands** (`commands.py`) — عملیات نوشتن (ایجاد، به‌روزرسانی، حذف)
+- **Queries** (`queries.py`) — عملیات خواندن (لیست، دریافت، بررسی دسترسی)
+
+#### فایل‌ها
+
+- `services/document_service/api/commands.py` — تمام عملیات نوشتن
+- `services/document_service/api/queries.py` — تمام عملیات خواندن
+- `services/document_service/api/views.py` — لایه HTTP که به commands/queries واگذار می‌کند
+
 ---
 
 ## 17) خلاصه نهایی

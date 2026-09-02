@@ -940,6 +940,27 @@ folder, created = Folder.objects.get_or_create(
 
     </section>
 
+    <section class="section" id="cqrs">
+      <h2>16.3) CQRS (پیاده سازی شده)</h2>
+      <p>سرویس document از <strong>CQRS</strong> استفاده می‌کند — جداسازی عملیات خواندن و نوشتن در ماژول‌های جداگانه.</p>
+      
+      <h4>مشکل</h4>
+      <p>در یک view مونولیتی، یک تابع هم خواندن و هم نوشتن را انجام می‌دهد.</p>
+      
+      <h4>راه حل</h4>
+      <ul>
+        <li><strong>Commands</strong> (<code>commands.py</code>) — عملیات نوشتن (ایجاد، به‌روزرسانی، حذف)</li>
+        <li><strong>Queries</strong> (<code>queries.py</code>) — عملیات خواندن (لیست، دریافت، بررسی دسترسی)</li>
+      </ul>
+      
+      <h4>فایل‌ها</h4>
+      <ul>
+        <li><code>services/document_service/api/commands.py</code> — تمام عملیات نوشتن</li>
+        <li><code>services/document_service/api/queries.py</code> — تمام عملیات خواندن</li>
+        <li><code>services/document_service/api/views.py</code> — لایه HTTP که به commands/queries واگذار می‌کند</li>
+      </ul>
+    </section>
+
     <section class="section" id="summary">
       <h2>17) خلاصه نهایی</h2>
       <p>اگر بخواهیم کل معماری را در چند جمله بگوییم:</p>

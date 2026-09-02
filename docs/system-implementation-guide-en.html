@@ -962,14 +962,44 @@ gateway_circuit_breaker_rejections_total{service="export-service"}</code></pre>
         <li><code>services/gateway/circuit_breaker_test.go</code> — 14 unit tests</li>
       </ul>
 
-      <h3>16.3 Other System Design Concepts (Future Practice)</h3>
-      <p>While idempotency and circuit breaker are implemented, other important concepts can be added for further learning:</p>
+      <h3>16.3 CQRS (Implemented)</h3>
+      <p>The document service uses <strong>CQRS</strong> — separating read and write operations into different modules.</p>
+      
+      <h4>The Problem</h4>
+      <p>In a monolithic view, one function handles both reads and writes. This mixes concerns and makes it harder to scale reads independently.</p>
+      
+      <h4>The Solution</h4>
+      <p>Split the document service into:</p>
+      <ul>
+        <li><strong>Commands</strong> (<code>commands.py</code>) — write operations (create, update, delete)</li>
+        <li><strong>Queries</strong> (<code>queries.py</code>) — read operations (list, get, check access)</li>
+      </ul>
+      
+      <h4>Benefits</h4>
+      <table>
+        <tr><th>Benefit</th><th>Explanation</th></tr>
+        <tr><td><strong>Read scaling</strong></td><td>Queries can hit read replicas without affecting writes</td></tr>
+        <tr><td><strong>Write optimization</strong></td><td>Commands focus on consistency, not read performance</td></tr>
+        <tr><td><strong>Clear boundaries</strong></td><td>Each module has a single responsibility</td></tr>
+        <tr><td><strong>Testability</strong></td><td>Commands and queries can be tested independently</td></tr>
+        <tr><td><strong>Future flexibility</strong></td><td>Easy to swap read DB for a cache or Elasticsearch</td></tr>
+      </table>
+      
+      <h4>Files</h4>
+      <ul>
+        <li><code>services/document_service/api/commands.py</code> — all write operations</li>
+        <li><code>services/document_service/api/queries.py</code> — all read operations</li>
+        <li><code>services/document_service/api/views.py</code> — HTTP layer that delegates to commands/queries</li>
+      </ul>
+
+      <h3>16.4 Other System Design Concepts (Future Practice)</h3>
+      <p>While idempotency, circuit breaker, and CQRS are implemented, other important concepts can be added for further learning:</p>
       <ol>
         <li><del><strong>Circuit Breaker Pattern</strong></del> <span style="color: var(--ok);">&#10003; Implemented</span></li>
         <li><strong>Bulkhead Pattern</strong>: Isolate components to prevent failure propagation</li>
         <li><strong>Retry with Exponential Backoff</strong>: Smart retry strategies for failed operations</li>
         <li><strong>Event Sourcing</strong>: Store state changes as a sequence of events</li>
-        <li><strong>CQRS (Command Query Responsibility Segregation)</strong>: Separate read and write models</li>
+        <li><del><strong>CQRS (Command Query Responsibility Segregation)</strong></del> <span style="color: var(--ok);">&#10003; Implemented</span></li>
         <li><strong>Saga Pattern</strong>: Manage distributed transactions across services</li>
         <li><strong>Rate Limiting</strong>: Control request rates to protect services</li>
         <li><strong>Caching Strategies</strong>: Implement caching for performance optimization</li>
