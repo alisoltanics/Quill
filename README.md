@@ -15,8 +15,23 @@
 
 ---
 
-> [!NOTE]
-> **This project is under active development.** New features are being added regularly to practice and explore system design, microservices architecture, real-time collaboration patterns, AI integration, and more. Stay tuned for updates.
+## What is this?
+
+Quill is a **real-time collaborative document editor** where multiple users can edit the same document simultaneously and see each other's changes live — like Google Docs.
+
+## Purpose
+
+This is a **learning project** built to explore:
+
+- **Microservices architecture** — splitting a system into independent services
+- **System design patterns** — CQRS, Circuit Breaker, Event-Driven Architecture
+- **Real-time collaboration** — using CRDT (Yjs) for conflict-free concurrent editing
+- **WebSocket communication** — bidirectional client-server sync
+- **Event streaming** — Kafka for async service communication
+- **Observability** — Prometheus, Grafana, Jaeger tracing
+- **AI-assisted development** — building with AI tools
+
+> **Not production software.** The goal is to deeply understand architectural patterns, not to build a deployable product.
 
 ---
 
