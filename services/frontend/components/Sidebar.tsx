@@ -28,6 +28,15 @@ const apiBase = () =>
     ? `${window.location.protocol}//${window.location.hostname}:8080/api`
     : 'http://localhost:8080/api'
 
+// Unique id per logical create attempt. Sent as an Idempotency-Key header so
+// the document service can de-duplicate retried folder creation.
+function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `f-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 // ─── Inline rename input ────────────────────────────────────────────────────
 
 function RenameInput({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
@@ -238,6 +247,9 @@ export default function Sidebar({ activeDocId, onSelect, onDocsLoaded }: Sidebar
   const [sharedDocs, setSharedDocs] = useState<DocMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [shareDoc, setShareDoc] = useState<DocMeta | null>(null)
+  // Reused while a folder-create request is unresolved so a double-click or
+  // network retry cannot create duplicate folders server-side.
+  const folderCreateKeyRef = useRef<string | null>(null)
 
   const hdrs = useCallback(() => ({
     'Content-Type': 'application/json',
@@ -281,12 +293,28 @@ export default function Sidebar({ activeDocId, onSelect, onDocsLoaded }: Sidebar
   // ── Folder actions ──────────────────────────────────────────────────────
 
   async function createFolder() {
-    const resp = await authFetch(`${apiBase()}/folders`, {
-      method: 'POST', headers: hdrs(), body: JSON.stringify({ name: 'New Folder' }),
-    })
-    if (!resp.ok) return
-    const folder = await resp.json()
-    setFolders(prev => [...prev, { ...folder, documents: [] }])
+    if (!folderCreateKeyRef.current) {
+      folderCreateKeyRef.current = newIdempotencyKey()
+    }
+    const key = folderCreateKeyRef.current
+    try {
+      const resp = await authFetch(`${apiBase()}/folders`, {
+        method: 'POST',
+        headers: { ...hdrs(), 'Idempotency-Key': key },
+        body: JSON.stringify({ name: 'New Folder' }),
+      })
+      if (!resp.ok) return
+      const folder = await resp.json()
+      // Guard against an idempotent replay response re-adding a folder we
+      // already hold locally.
+      setFolders(prev =>
+        prev.some(f => f.id === folder.id)
+          ? prev
+          : [...prev, { ...folder, documents: [] }],
+      )
+    } finally {
+      folderCreateKeyRef.current = null
+    }
   }
 
   async function renameFolder(id: number, name: string) {

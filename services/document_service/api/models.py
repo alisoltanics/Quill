@@ -1,14 +1,28 @@
 from django.db import models
+from django.db.models import Q
 
 
 class Folder(models.Model):
     user_id = models.IntegerField(db_index=True)
     name = models.CharField(max_length=255, default='New Folder')
+    # Client-supplied key so a retried POST /folders returns the original
+    # folder instead of creating a duplicate. NULL when no key was provided.
+    idempotency_key = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['name']
+        constraints = [
+            # Partial unique index: enforces one folder per (user, key) and is
+            # what makes get_or_create safe under concurrent duplicate POSTs.
+            # NULL keys are intentionally exempt (no idempotency requested).
+            models.UniqueConstraint(
+                fields=['user_id', 'idempotency_key'],
+                condition=Q(idempotency_key__isnull=False),
+                name='uniq_folder_user_idempotency',
+            ),
+        ]
 
     def __str__(self):
         return f'Folder {self.pk} ({self.name}) — user {self.user_id}'
